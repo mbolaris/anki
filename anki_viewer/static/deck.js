@@ -74,6 +74,12 @@
       return;
     }
 
+    const clozeStateByCard = new Map();
+
+    cardElements.forEach((card) => {
+      setupClozeCard(card);
+    });
+
     const cardById = new Map(cardElements.map((card) => [card.dataset.cardId, card]));
     const counterEl = viewer.querySelector('[data-role="counter"]');
     const progressLabel = viewer.querySelector('[data-role="progress-percent"]');
@@ -89,6 +95,219 @@
 
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
+
+    function getOrCreateClozeState(card) {
+      if (!card || card.dataset.cardType !== "cloze") {
+        return null;
+      }
+      const cardId = card.dataset.cardId;
+      if (!cardId) {
+        return null;
+      }
+      let state = clozeStateByCard.get(cardId);
+      if (!state) {
+        state = {
+          endpoint: card.dataset.cardEndpoint || "",
+          loaded: false,
+          loading: false,
+          promise: null,
+          text: "",
+          contentByNum: new Map(),
+          revealed: new Set(),
+          error: null,
+        };
+        clozeStateByCard.set(cardId, state);
+      }
+      return state;
+    }
+
+    function getFallbackClozeContent(card, identifier) {
+      if (!identifier) {
+        return null;
+      }
+      const selector = `.question-revealed [data-cloze="${identifier}"]`;
+      const fallback = card.querySelector(selector);
+      if (fallback instanceof HTMLElement) {
+        return fallback.innerHTML;
+      }
+      return null;
+    }
+
+    function loadClozeData(card, state) {
+      if (!state) {
+        return Promise.resolve(null);
+      }
+      if (state.loaded) {
+        return state.promise ? state.promise : Promise.resolve(state);
+      }
+      if (state.loading && state.promise) {
+        return state.promise;
+      }
+      if (!state.endpoint) {
+        state.loaded = true;
+        if (!(state.contentByNum instanceof Map)) {
+          state.contentByNum = new Map();
+        }
+        state.promise = Promise.resolve(state);
+        return state.promise;
+      }
+      state.loading = true;
+      state.promise = fetch(state.endpoint, { headers: { Accept: "application/json" } })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load cloze data (${response.status})`);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data && data.type === "cloze") {
+            state.text = typeof data.text === "string" ? data.text : "";
+            const items = Array.isArray(data.clozes) ? data.clozes : [];
+            state.contentByNum = new Map(
+              items
+                .filter((item) => Object.prototype.hasOwnProperty.call(item, "num"))
+                .map((item) => [String(item.num), item.content])
+            );
+          } else {
+            state.contentByNum = new Map();
+          }
+          state.loaded = true;
+          state.error = null;
+          return state;
+        })
+        .catch((error) => {
+          console.warn("Unable to load cloze data for card", card.dataset.cardId, error);
+          state.error = error;
+          state.loaded = true;
+          if (!(state.contentByNum instanceof Map)) {
+            state.contentByNum = new Map();
+          }
+          return state;
+        })
+        .finally(() => {
+          state.loading = false;
+        });
+      return state.promise;
+    }
+
+    function revealClozeSpan(card, span) {
+      const state = getOrCreateClozeState(card);
+      if (!state) {
+        return;
+      }
+      loadClozeData(card, state).then(() => {
+        if (!(span instanceof HTMLElement) || !span.classList.contains("cloze-hidden")) {
+          return;
+        }
+        const identifier = span.dataset.cloze ? String(span.dataset.cloze) : "";
+        let content = identifier ? state.contentByNum.get(identifier) : undefined;
+        if (!content) {
+          content = getFallbackClozeContent(card, identifier);
+        }
+        if (!content) {
+          return;
+        }
+        span.classList.remove("cloze-hidden");
+        span.classList.add("cloze-revealed");
+        span.innerHTML = content;
+        span.setAttribute("aria-pressed", "true");
+        span.dataset.revealed = "true";
+        if (identifier) {
+          state.revealed.add(identifier);
+        }
+      });
+    }
+
+    function setupClozeCard(card) {
+      if (!card || card.dataset.cardType !== "cloze" || card.dataset.clozeSetup === "true") {
+        return;
+      }
+      const questionFront = card.querySelector(".question-front");
+      if (!questionFront) {
+        return;
+      }
+      const state = getOrCreateClozeState(card);
+      if (state && !(state.contentByNum instanceof Map)) {
+        state.contentByNum = new Map();
+      }
+      const spans = questionFront.querySelectorAll(".cloze");
+      spans.forEach((span) => {
+        if (!(span instanceof HTMLElement)) {
+          return;
+        }
+        if (!span.dataset.originalHtml) {
+          span.dataset.originalHtml = span.innerHTML;
+        }
+        if (span.classList.contains("cloze-hidden")) {
+          span.tabIndex = 0;
+          span.setAttribute("role", "button");
+          span.setAttribute("aria-pressed", "false");
+        }
+      });
+
+      questionFront.addEventListener("click", (event) => {
+        const rawTarget = event.target;
+        if (!(rawTarget instanceof HTMLElement)) {
+          return;
+        }
+        const target = rawTarget.closest(".cloze");
+        if (!(target instanceof HTMLElement) || !target.classList.contains("cloze-hidden")) {
+          return;
+        }
+        event.preventDefault();
+        revealClozeSpan(card, target);
+      });
+
+      questionFront.addEventListener("keydown", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || !target.classList.contains("cloze-hidden")) {
+          return;
+        }
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        revealClozeSpan(card, target);
+      });
+
+      card.dataset.clozeSetup = "true";
+    }
+
+    function resetClozeForCard(card) {
+      if (!card || card.dataset.cardType !== "cloze") {
+        return;
+      }
+      const questionFront = card.querySelector(".question-front");
+      if (!questionFront) {
+        return;
+      }
+      const spans = questionFront.querySelectorAll(".cloze");
+      spans.forEach((span) => {
+        if (!(span instanceof HTMLElement)) {
+          return;
+        }
+        const original = span.dataset.originalHtml;
+        if (span.classList.contains("cloze-revealed")) {
+          span.classList.remove("cloze-revealed");
+          span.classList.add("cloze-hidden");
+          if (original) {
+            span.innerHTML = original;
+          }
+        }
+        if (span.classList.contains("cloze-hidden")) {
+          span.tabIndex = 0;
+          span.setAttribute("role", "button");
+          span.setAttribute("aria-pressed", "false");
+          span.removeAttribute("data-revealed");
+        } else {
+          span.setAttribute("aria-pressed", "true");
+        }
+      });
+      const state = getOrCreateClozeState(card);
+      if (state) {
+        state.revealed.clear();
+      }
+    }
 
     let activeCardIds = cardElements
       .map((card) => card.dataset.cardId)
@@ -301,6 +520,7 @@
         card.classList.add("is-known");
         card.classList.remove("is-active", "revealed");
         updateQuestionVisibility(card);
+        resetClozeForCard(card);
       }
       activeCardIds = activeCardIds.filter((id) => id !== cardId);
       updateKnownCount();
@@ -320,6 +540,7 @@
       activeCardIds = cardElements.map((card) => {
         card.classList.remove("is-known", "revealed");
         updateQuestionVisibility(card);
+        resetClozeForCard(card);
         return card.dataset.cardId;
       });
       updateProgress();

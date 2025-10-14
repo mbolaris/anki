@@ -14,7 +14,7 @@ from typing import Dict, List
 from urllib.parse import unquote
 from zipfile import ZipFile
 
-from .card_types import detect_card_type
+from .card_types import detect_card_type, parse_cloze_deletions
 
 _FIELD_SEPARATOR = "\x1f"
 _IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
@@ -40,6 +40,8 @@ class Card:
     card_type: str
     question_revealed: str | None = None
     extra_fields: List[str] = field(default_factory=list)
+    raw_question: str | None = None
+    cloze_deletions: List[Dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -220,8 +222,11 @@ def _read_cards(
         )
         card_type = detect_card_type(card_preview)
 
+        original_question = question
+        cloze_deletions: List[Dict[str, object]] = []
         question_revealed = None
         if "{{c" in question:
+            cloze_deletions = parse_cloze_deletions(question)
             rendered_question = _render_cloze(question, reveal=False)
             rendered_answer = _render_cloze(question, reveal=True)
             question_revealed = rendered_answer
@@ -242,6 +247,8 @@ def _read_cards(
                 card_type=card_type,
                 extra_fields=extra,
                 question_revealed=question_revealed,
+                raw_question=original_question,
+                cloze_deletions=cloze_deletions,
             )
         )
     return cards
@@ -301,9 +308,12 @@ def _render_cloze(html: str, *, reveal: bool) -> str:
                 f"{content}{hint_html}</span>"
             )
 
-        placeholder = "&hellip;"
+        placeholder = '<span class="cloze-placeholder">[...]</span>'
         if hint:
-            placeholder = f'<span class="cloze-hint">{hint}</span>'
+            placeholder = (
+                '<span class="cloze-placeholder">[...]</span>'
+                f'<span class="cloze-hint">({hint})</span>'
+            )
         return f'<span class="cloze cloze-hidden" data-cloze="{ordinal}">{placeholder}</span>'
 
     return _CLOZE_PATTERN.sub(replacement, html)

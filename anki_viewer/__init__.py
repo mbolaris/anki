@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from flask import Flask, render_template
+from flask import Flask, abort, jsonify, render_template
 
 from .card_types import (
     detect_card_type,
@@ -59,6 +59,37 @@ def create_app(apkg_path: Optional[Path] = None) -> Flask:
             return render_template("deck_not_found.html", deck_id=deck_id), 404
 
         return render_template("deck.html", deck=deck, collection=deck_collection)
+
+    @app.route("/deck/<int:deck_id>/card/<int:card_id>.json")
+    def card_data(deck_id: int, card_id: int):
+        if deck_collection is None:
+            abort(404)
+
+        deck = deck_collection.decks.get(deck_id)
+        if deck is None:
+            abort(404)
+
+        card = next((card for card in deck.cards if card.card_id == card_id), None)
+        if card is None:
+            abort(404)
+
+        payload = {
+            "id": card.card_id,
+            "type": card.card_type,
+            "question": card.question,
+            "answer": card.answer,
+            "question_revealed": card.question_revealed,
+            "extra_fields": card.extra_fields,
+        }
+
+        if card.card_type == "cloze":
+            payload["text"] = card.raw_question or ""
+            payload["clozes"] = [
+                {"num": deletion.get("num"), "content": deletion.get("content")}
+                for deletion in card.cloze_deletions
+            ]
+
+        return jsonify(payload)
 
     return app
 

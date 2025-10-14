@@ -54,7 +54,14 @@
           All cards are marked as known. Reset progress to start over.
         </div>
         {% for card in deck.cards %}
-          <article class="card" data-card-id="{{ card.card_id }}">
+          <article
+            class="card"
+            data-card-id="{{ card.card_id }}"
+            data-card-type="{{ card.card_type }}"
+            {% if card.card_type == "cloze" %}
+              data-card-endpoint="{{ url_for('card_data', deck_id=deck.deck_id, card_id=card.card_id) }}"
+            {% endif %}
+          >
             <header class="card-header">
               <div class="card-header__primary">
                 <span class="card-pill card-pill--primary">Card {{ loop.index }}</span>
@@ -74,6 +81,9 @@
             <div class="card-body">
               <div class="card-face question">
                 <h4>Question</h4>
+                {% if card.card_type == "cloze" %}
+                  <p class="cloze-instructions">Click a blank to reveal the hidden text.</p>
+                {% endif %}
                 <div class="content{% if card.question_revealed %} has-revealed{% endif %}">
                   <div class="question-front" aria-hidden="false">{{ card.question | safe }}</div>
                   {% if card.question_revealed %}
