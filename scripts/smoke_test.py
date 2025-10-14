@@ -18,6 +18,18 @@ DEFAULT_PACKAGE = Path("data/MCAT_High_Yield.apkg")
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command line arguments for the smoke test script.
+
+    Returns
+    -------
+    argparse.Namespace
+        Namespace containing the ``package`` argument.
+
+    Examples
+    --------
+    >>> parse_args().package
+    'data/MCAT_High_Yield.apkg'
+    """
     parser = argparse.ArgumentParser(
         description=(
             "Run a basic smoke test against the Flask application using the bundled"
@@ -36,6 +48,18 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Execute the smoke test.
+
+    Returns
+    -------
+    int
+        Exit status code that mirrors the health of the application.
+
+    Examples
+    --------
+    >>> main()  # doctest: +SKIP
+    0
+    """
     args = parse_args()
     package_path = Path(args.package).expanduser()
 
@@ -53,26 +77,32 @@ def main() -> int:
     app = create_app()
 
     with app.test_client() as client:
-        index_resp = client.get("/")
-        deck_resp = client.get(f"/deck/{first_deck_id}")
+        responses = {
+            "index": client.get("/"),
+            "deck": client.get(f"/deck/{first_deck_id}"),
+        }
 
-    ok_index = index_resp.status_code == 200
-    ok_deck = deck_resp.status_code == 200
+        card_list = client.get("/api/cards")
+        responses["api_cards"] = card_list
 
-    print(f"Index status: {index_resp.status_code}")
-    print(f"Deck status: {deck_resp.status_code}")
-    print(
-        "Subtitle present:",
-        "cards available across" in index_resp.get_data(as_text=True),
-    )
+        if card_list.status_code == 200:
+            cards_json = card_list.get_json(silent=True) or {}
+            for card in cards_json.get("cards", [])[:3]:
+                deck_id = card.get("deck_id")
+                card_id = card.get("id")
+                key = f"card_{deck_id}_{card_id}"
+                responses[key] = client.get(f"/deck/{deck_id}/card/{card_id}.json")
 
-    if ok_index and ok_deck:
+    for name, resp in responses.items():
+        print(f"{name} status: {resp.status_code}")
+
+    failures = [name for name, resp in responses.items() if resp.status_code != 200]
+
+    if not failures:
         return 0
 
-    if not ok_index:
-        print("Index endpoint failed the smoke test.", file=sys.stderr)
-    if not ok_deck:
-        print("Deck endpoint failed the smoke test.", file=sys.stderr)
+    for name in failures:
+        print(f"Endpoint {name!r} failed the smoke test.", file=sys.stderr)
     return 1
 
 

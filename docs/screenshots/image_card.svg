@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" role="img" aria-labelledby="title desc">
+  <title id="title">Image card preview</title>
+  <desc id="desc">Image card with caption and media frame</desc>
+  <rect width="480" height="300" fill="#ecfeff" rx="24" />
+  <g transform="translate(32 32)">
+    <rect width="416" height="200" rx="20" fill="#ffffff" stroke="#22d3ee" stroke-width="2" />
+    <rect x="48" y="48" width="320" height="120" rx="12" fill="#cffafe" stroke="#06b6d4" stroke-dasharray="6 4" />
+    <text x="208" y="116" text-anchor="middle" font-family="'Inter',sans-serif" font-size="16" fill="#0f172a">Illustration</text>
+  </g>
+  <text x="240" y="260" text-anchor="middle" font-family="'Inter',sans-serif" font-size="18" fill="#0f172a">Identify the anatomy label</text>
+</svg>

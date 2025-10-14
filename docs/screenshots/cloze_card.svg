@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" role="img" aria-labelledby="title desc">
+  <title id="title">Cloze card preview</title>
+  <desc id="desc">Cloze card with hidden deletions and hint controls</desc>
+  <rect width="480" height="300" fill="#fdf2f8" rx="24" />
+  <g transform="translate(32 40)">
+    <rect width="416" height="180" rx="16" fill="#ffffff" stroke="#f9a8d4" stroke-width="2" />
+    <text x="24" y="54" font-family="'Inter',sans-serif" font-size="18" font-weight="500" fill="#1f2937">The capital of France is
+      <tspan fill="#9ca3af">[...]</tspan></text>
+    <text x="24" y="96" font-family="'Inter',sans-serif" font-size="16" fill="#6b7280">Click to reveal hidden text</text>
+    <rect x="24" y="124" width="180" height="24" rx="12" fill="#fce7f3" />
+    <text x="114" y="142" text-anchor="middle" font-family="'Inter',sans-serif" font-size="14" fill="#db2777">Reveal cloze</text>
+  </g>
+  <g transform="translate(160 234)">
+    <rect width="160" height="40" rx="20" fill="#db2777" />
+    <text x="80" y="26" text-anchor="middle" font-family="'Inter',sans-serif" font-size="16" fill="#ffffff">Show next</text>
+  </g>
+</svg>
