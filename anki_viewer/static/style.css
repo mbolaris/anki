@@ -499,6 +499,7 @@ body {
 }
 
 .card-stage .card {
+  grid-area: 1 / 1;
   width: min(100%, 720px);
   opacity: 0;
   transform: translateY(18px) scale(0.97);
@@ -706,6 +707,7 @@ body {
 }
 
 .card-stage .empty-state {
+  grid-area: 1 / 1;
   margin: 0;
   font-size: 1rem;
   color: var(--muted);
