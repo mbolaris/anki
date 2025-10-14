@@ -63,10 +63,38 @@ class DeckCollection:
 
     @property
     def total_cards(self) -> int:
+        """Return the total number of cards in the collection.
+
+        Examples
+        --------
+        >>> deck = Deck(deck_id=1, name='Example', cards=[Card(1, 1, 1, 'Example', 0, '', '', 'basic')])
+        >>> DeckCollection(decks={1: deck}).total_cards
+        1
+        """
         return sum(len(deck.cards) for deck in self.decks.values())
 
     def media_url_for(self, filename: str) -> str | None:
-        """Return the served URL for a media *filename* when available."""
+        """Return the served URL for a media *filename* when available.
+
+        Parameters
+        ----------
+        filename:
+            Name of the media file as referenced inside the Anki collection.
+
+        Returns
+        -------
+        str | None
+            Fully qualified URL for the stored media file or ``None`` when the
+            filename is unknown to the collection.
+
+        Examples
+        --------
+        >>> collection = DeckCollection(decks={}, media_filenames={'img.png': 'img.png'})
+        >>> collection.media_url_for('img.png')
+        '/media/img.png'
+        >>> collection.media_url_for('missing.png') is None
+        True
+        """
 
         stored = self.media_filenames.get(filename)
         if not stored:
@@ -83,7 +111,32 @@ def load_collection(
     media_dir: Path | None = None,
     media_url_path: str = "/media",
 ) -> DeckCollection:
-    """Load an Anki package and return the parsed cards grouped by deck."""
+    """Load an Anki package and return the parsed cards grouped by deck.
+
+    Parameters
+    ----------
+    package_path:
+        Path to the ``.apkg`` package that should be parsed.
+    media_dir:
+        Optional directory into which media files are extracted. When omitted a
+        temporary directory is created.
+    media_url_path:
+        Base URL under which the media files will be served by the Flask app.
+
+    Returns
+    -------
+    DeckCollection
+        Collection containing all decks and cards included in the package.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> # ``MCAT_High_Yield.apkg`` ships with the repository; loading may fail
+    >>> # during documentation builds that lack the data file, so guard access.
+    >>> package = Path('data/MCAT_High_Yield.apkg')
+    >>> package.exists()
+    True
+    """
 
     if not package_path.exists():
         raise DeckLoadError(f"Package not found: {package_path}")
@@ -133,6 +186,15 @@ def load_collection(
 
 
 def _extract_package(package_path: Path, destination: str) -> None:
+    """Extract the ``.apkg`` archive into *destination*.
+
+    Parameters
+    ----------
+    package_path:
+        Path to the source archive.
+    destination:
+        Directory into which the archive contents should be extracted.
+    """
     try:
         with ZipFile(package_path) as archive:
             archive.extractall(destination)
@@ -141,6 +203,7 @@ def _extract_package(package_path: Path, destination: str) -> None:
 
 
 def _find_collection_file(extracted_path: Path) -> Path:
+    """Locate the main SQLite collection file inside *extracted_path*."""
     for candidate in ("collection.anki21", "collection.anki2"):
         potential = extracted_path / candidate
         if potential.exists():
@@ -149,6 +212,28 @@ def _find_collection_file(extracted_path: Path) -> Path:
 
 
 def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:
+    """Copy media files from the extracted package to *destination*.
+
+    Parameters
+    ----------
+    extracted_path:
+        Directory containing the unpacked Anki package.
+    destination:
+        Directory where media files should be stored.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping from the original filename referenced by cards to the stored
+        filename within *destination*.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> tmp = Path(tempfile.mkdtemp())
+    >>> _read_media(tmp, tmp)
+    {}
+    """
     media_file = extracted_path / "media"
     if not media_file.exists():
         return {}
@@ -178,6 +263,27 @@ def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:
 def _load_from_sqlite(
     collection_path: Path, media_map: Dict[str, str], media_url_path: str
 ) -> DeckCollection:
+    """Populate a :class:`DeckCollection` by reading the SQLite database.
+
+    Parameters
+    ----------
+    collection_path:
+        Path to the extracted ``collection.anki21`` file.
+    media_map:
+        Mapping of original media filenames to stored filenames.
+    media_url_path:
+        Base URL prefix used when inlining media into cards.
+
+    Returns
+    -------
+    DeckCollection
+        Fully populated collection instance ready for rendering in the web UI.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> _load_from_sqlite(Path('collection.anki21'), {}, '/media')  # doctest: +SKIP
+    """
     try:
         # Use the connection as a context manager so it is closed when we're
         # done reading. Also convert the cards generator to a list while the
@@ -201,6 +307,27 @@ def _load_from_sqlite(
 
 
 def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
+    """Return a mapping of deck IDs to human readable names.
+
+    Parameters
+    ----------
+    conn:
+        SQLite connection providing access to the ``col`` table.
+
+    Returns
+    -------
+    dict[int, str]
+        Mapping of deck identifier to the display name stored in the package.
+
+    Examples
+    --------
+    >>> import sqlite3
+    >>> conn = sqlite3.connect(':memory:')
+    >>> _ = conn.execute('CREATE TABLE col (decks TEXT)')
+    >>> _ = conn.execute('INSERT INTO col VALUES ("{}")')
+    >>> _read_deck_names(conn)
+    {}
+    """
     cursor = conn.execute("SELECT decks FROM col LIMIT 1")
     row = cursor.fetchone()
     if row is None:
@@ -220,10 +347,28 @@ def _read_cards(
     media_map: Dict[str, str],
     media_url_path: str,
 ) -> List[Card]:
-    """Read all cards from the collection and return a list of Card objects.
+    """Read all cards from the collection and return a list of :class:`Card`.
 
-    This fetches all rows while the DB connection is open so no cursor or
-    generator keeps the database file locked after the connection is closed.
+    Parameters
+    ----------
+    conn:
+        Open SQLite connection to the collection database.
+    deck_names:
+        Mapping from deck identifiers to their display names.
+    media_map:
+        Mapping of original media filenames to stored filenames.
+    media_url_path:
+        Base URL prefix used for serving media.
+
+    Returns
+    -------
+    list[Card]
+        Fully populated card instances ready for consumption by the web UI.
+
+    Notes
+    -----
+    All rows are fetched while the SQLite connection is open so that the
+    database file can be safely deleted afterwards.
     """
     query = """
         SELECT
@@ -286,6 +431,27 @@ def _read_cards(
 
 
 def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> str:
+    """Replace media references in *html* with served URLs.
+
+    Parameters
+    ----------
+    html:
+        HTML text potentially containing ``<img>`` tags.
+    media_map:
+        Mapping from original filenames to stored filenames.
+    media_url_path:
+        Base URL prefix used for served media files.
+
+    Returns
+    -------
+    str
+        HTML string with updated ``src`` attributes.
+
+    Examples
+    --------
+    >>> _inline_media('<img src="foo.png">', {'foo.png': 'foo.png'}, '/media')
+    '<img src="/media/foo.png">'
+    """
     if not html or not media_map:
         return html
 
@@ -315,6 +481,25 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
 
 
 def _build_media_url(stored_name: str, media_url_path: str) -> str:
+    """Return the public URL for *stored_name*.
+
+    Parameters
+    ----------
+    stored_name:
+        Filename of the stored media asset.
+    media_url_path:
+        URL prefix under which the media files are served.
+
+    Returns
+    -------
+    str
+        Absolute URL path to the media file.
+
+    Examples
+    --------
+    >>> _build_media_url('foo.png', '/media')
+    '/media/foo.png'
+    """
     base = media_url_path.rstrip("/")
     if not base:
         return stored_name
@@ -322,6 +507,32 @@ def _build_media_url(stored_name: str, media_url_path: str) -> str:
 
 
 def _store_media_file(destination: Path, filename: str, source: Path) -> str | None:
+    """Copy a media file into *destination* and return the stored filename.
+
+    Parameters
+    ----------
+    destination:
+        Directory where the file should be stored.
+    filename:
+        Name of the file inside the original package.
+    source:
+        Path to the file inside the extracted package directory.
+
+    Returns
+    -------
+    str | None
+        Stored filename or ``None`` if the copy failed.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> dest = Path(tempfile.mkdtemp())
+    >>> src = dest / 'sample.txt'
+    >>> _ = src.write_text('hi')
+    >>> stored = _store_media_file(dest, 'sample.txt', src)
+    >>> stored in {'sample.txt', 'sample_1.txt'}
+    True
+    """
     safe_name = _sanitize_media_filename(filename)
     if not safe_name:
         return None
@@ -335,6 +546,23 @@ def _store_media_file(destination: Path, filename: str, source: Path) -> str | N
 
 
 def _sanitize_media_filename(filename: str) -> str:
+    """Return a filesystem-safe filename derived from *filename*.
+
+    Parameters
+    ----------
+    filename:
+        Raw filename from the Anki media manifest.
+
+    Returns
+    -------
+    str
+        Sanitised filename that is safe to store on disk.
+
+    Examples
+    --------
+    >>> _sanitize_media_filename(' spaced/file?.png')
+    'file_.png'
+    """
     name = Path(filename).name
     if not name:
         return "media"
@@ -343,6 +571,29 @@ def _sanitize_media_filename(filename: str) -> str:
 
 
 def _dedupe_filename(destination: Path, filename: str) -> str:
+    """Ensure *filename* is unique within *destination* by appending a counter.
+
+    Parameters
+    ----------
+    destination:
+        Directory to check for existing filenames.
+    filename:
+        Desired filename.
+
+    Returns
+    -------
+    str
+        Original filename or a suffixed version that does not yet exist.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> dest = Path(tempfile.mkdtemp())
+    >>> (dest / 'name.png').write_text('x')
+    1
+    >>> _dedupe_filename(dest, 'name.png')
+    'name_1.png'
+    """
     candidate = filename
     stem = Path(filename).stem
     suffix = Path(filename).suffix
@@ -354,6 +605,23 @@ def _dedupe_filename(destination: Path, filename: str) -> str:
 
 
 def _prepare_media_directory(destination: Path) -> None:
+    """Create *destination* and remove leftover files from previous runs.
+
+    Parameters
+    ----------
+    destination:
+        Directory to prepare before media extraction.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> dest = Path(tempfile.mkdtemp())
+    >>> (dest / 'old.txt').write_text('x')
+    1
+    >>> _prepare_media_directory(dest)
+    >>> (dest / 'old.txt').exists()
+    False
+    """
     destination.mkdir(parents=True, exist_ok=True)
     for entry in destination.iterdir():
         try:
@@ -368,9 +636,23 @@ def _prepare_media_directory(destination: Path) -> None:
 def _render_cloze(html: str, *, reveal: bool) -> str:
     """Convert Anki cloze deletions to semantic HTML spans.
 
-    The default Anki cloze syntax (``{{c1::text::hint}}``) is transformed into
-    ``<span class="cloze">`` elements so the front side of the card shows a
-    blank (optionally with a hint) and the back side reveals the hidden text.
+    Parameters
+    ----------
+    html:
+        Source HTML containing cloze markers.
+    reveal:
+        When ``True`` the cloze text is revealed, otherwise placeholders are
+        rendered.
+
+    Returns
+    -------
+    str
+        HTML with cloze markers replaced by styled ``<span>`` elements.
+
+    Examples
+    --------
+    >>> _render_cloze("{{c1::Paris}}", reveal=False)
+    '<span class="cloze cloze-hidden" data-cloze="1"><span class="cloze-placeholder">[...]</span></span>'
     """
 
     def replacement(match: re.Match[str]) -> str:

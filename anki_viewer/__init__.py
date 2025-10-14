@@ -1,4 +1,10 @@
-"""Flask application factory for the Anki deck viewer."""
+"""Flask application factory for the Anki deck viewer.
+
+The module exposes :func:`create_app` which is used both by ``app.py`` and the
+test-suite to instantiate a fully configured Flask application. Additional
+helpers provide specialised behaviour such as extracting image references from
+cards.
+"""
 from __future__ import annotations
 
 import re
@@ -33,6 +39,21 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     media_url_path:
         Optional URL prefix used when serving extracted media files. When not
         provided the default of ``/media`` is applied.
+
+    Returns
+    -------
+    flask.Flask
+        A ready-to-use Flask application. The returned instance has the
+        ``MEDIA_DIRECTORY`` and ``MEDIA_URL_PATH`` configuration values set and
+        registers routes for rendering decks and serving card data.
+
+    Examples
+    --------
+    >>> from anki_viewer import create_app
+    >>> app = create_app()
+    >>> client = app.test_client()
+    >>> client.get('/').status_code in {200, 404}
+    True
     """
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -59,6 +80,18 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
     @app.context_processor
     def inject_globals():
+        """Provide template helpers for rendering deck metadata.
+
+        Returns
+        -------
+        dict
+            Mapping of values injected into every template.
+
+        Examples
+        --------
+        >>> inject_globals()["media_url_path"].startswith("/")
+        True
+        """
         return {
             "deck_collection": deck_collection,
             "missing_package": deck_collection is None,
@@ -68,12 +101,41 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
     @app.route("/")
     def index():
+        """Render the landing page or missing package notice.
+
+        Returns
+        -------
+        werkzeug.wrappers.response.Response
+            Response object rendering the appropriate template.
+
+        Examples
+        --------
+        >>> index().status_code in {200, 404}
+        True
+        """
         if deck_collection is None:
             return render_template("missing_package.html", package_path=package_path)
         return render_template("index.html", collection=deck_collection)
 
     @app.route("/deck/<int:deck_id>")
     def deck(deck_id: int):
+        """Render the detail view for a specific deck.
+
+        Parameters
+        ----------
+        deck_id:
+            Identifier of the deck to render.
+
+        Returns
+        -------
+        tuple | werkzeug.wrappers.response.Response
+            Response containing the deck view or a 404 template.
+
+        Examples
+        --------
+        >>> deck(0)[1] if isinstance(deck(0), tuple) else deck(0).status_code  # doctest: +SKIP
+        404
+        """
         if deck_collection is None:
             return render_template("missing_package.html", package_path=package_path), 404
 
@@ -85,6 +147,29 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
     @app.route("/deck/<int:deck_id>/card/<int:card_id>.json")
     def card_data(deck_id: int, card_id: int):
+        """Return JSON describing an individual card.
+
+        The payload contains the card's text as well as any additional metadata
+        derived during ingestion such as cloze deletions or inline image
+        sources.
+
+        Parameters
+        ----------
+        deck_id:
+            Identifier of the deck containing the card.
+        card_id:
+            Identifier of the card within the deck.
+
+        Returns
+        -------
+        flask.Response
+            JSON payload describing the card.
+
+        Examples
+        --------
+        >>> card_data(1, 1).status_code  # doctest: +SKIP
+        200
+        """
         if deck_collection is None:
             abort(404)
 
@@ -118,10 +203,63 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         return jsonify(payload)
 
+    @app.route("/api/cards")
+    def list_cards():
+        """Return a JSON list containing high-level metadata for each card.
+
+        This endpoint is primarily intended for automated verification and UI
+        tests where only the deck identifier, card identifier and card type are
+        required.
+
+        Returns
+        -------
+        flask.Response
+            JSON payload with a ``cards`` list.
+
+        Examples
+        --------
+        >>> list_cards().json  # doctest: +SKIP
+        {'cards': [...]}  # doctest: +SKIP
+        """
+
+        if deck_collection is None:
+            abort(503)
+
+        cards_payload = []
+        for deck in deck_collection.decks.values():
+            for card in deck.cards:
+                cards_payload.append(
+                    {
+                        "id": card.card_id,
+                        "deck_id": card.deck_id,
+                        "deck_name": card.deck_name,
+                        "type": card.card_type,
+                    }
+                )
+
+        return jsonify({"cards": cards_payload})
+
     media_route_prefix = media_url_path or _DEFAULT_MEDIA_URL_PATH
 
     @app.route(f"{media_route_prefix}/<path:filename>")
     def media(filename: str):
+        """Serve media files extracted from the Anki package.
+
+        Parameters
+        ----------
+        filename:
+            Relative filename of the media asset to serve.
+
+        Returns
+        -------
+        flask.Response
+            Response streaming the requested file.
+
+        Examples
+        --------
+        >>> media('image.png').status_code  # doctest: +SKIP
+        200
+        """
         media_dir = app.config.get("MEDIA_DIRECTORY")
         if media_dir is None:
             abort(404)
@@ -143,7 +281,27 @@ __all__ = [
 
 
 def _normalize_media_url_path(value: str | None) -> str:
-    """Return a canonical media URL prefix for *value*."""
+    """Return a canonical media URL prefix for *value*.
+
+    Parameters
+    ----------
+    value:
+        Raw value retrieved from configuration or the environment.
+
+    Returns
+    -------
+    str
+        Sanitised path that always starts with a ``/`` and does not end with a
+        trailing slash. When *value* is empty the default ``/media`` prefix is
+        returned.
+
+    Examples
+    --------
+    >>> _normalize_media_url_path('media')
+    '/media'
+    >>> _normalize_media_url_path('/assets/')
+    '/assets'
+    """
 
     if not value:
         return _DEFAULT_MEDIA_URL_PATH
@@ -159,7 +317,27 @@ def _normalize_media_url_path(value: str | None) -> str:
 
 
 def _gather_image_sources(card: object, *, media_url_path: str) -> list[str]:
-    """Extract unique image sources from the HTML content of *card*."""
+    """Extract unique image sources from the HTML content of *card*.
+
+    Parameters
+    ----------
+    card:
+        Card-like object containing HTML fields to inspect.
+    media_url_path:
+        Base path that valid image sources must begin with.
+
+    Returns
+    -------
+    list[str]
+        Sorted list of unique image URLs belonging to the provided card.
+
+    Examples
+    --------
+    >>> from types import SimpleNamespace
+    >>> sample = SimpleNamespace(question="<img src='/media/a.png'>", answer="")
+    >>> _gather_image_sources(sample, media_url_path='/media')
+    ['/media/a.png']
+    """
 
     texts: Iterable[str | None] = (
         getattr(card, "question", None),
