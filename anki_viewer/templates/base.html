@@ -7,20 +7,24 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
   <body>
-    <header class="site-header">
-      <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
-      {% if deck_collection %}
-        <p class="subtitle">
-          {{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.
-        </p>
-      {% endif %}
-    </header>
+    {% block site_header %}
+      <header class="site-header">
+        <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
+        {% if deck_collection %}
+          <p class="subtitle">
+            {{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.
+          </p>
+        {% endif %}
+      </header>
+    {% endblock %}
     <main class="{% block main_class %}content{% endblock %}">
       {% block content %}{% endblock %}
     </main>
-    <footer class="site-footer">
-      <p>Deck source: <code>{{ package_path }}</code></p>
-    </footer>
+    {% block site_footer %}
+      <footer class="site-footer">
+        <p>Deck source: <code>{{ package_path }}</code></p>
+      </footer>
+    {% endblock %}
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>
