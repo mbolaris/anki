@@ -34,6 +34,7 @@ class Card:
     template_ordinal: int
     question: str
     answer: str
+    question_revealed: str | None = None
     extra_fields: List[str] = field(default_factory=list)
 
 
@@ -204,9 +205,11 @@ def _read_cards(
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
         question = _inline_media(fields[0], media_map) if fields else ""
         answer = _inline_media(fields[1], media_map) if len(fields) > 1 else ""
+        question_revealed = None
         if "{{c" in question:
             rendered_question = _render_cloze(question, reveal=False)
             rendered_answer = _render_cloze(question, reveal=True)
+            question_revealed = rendered_answer
             if answer.strip():
                 rendered_answer = f"{rendered_answer}<div class=\"cloze-extra-answer\">{answer}</div>"
             question, answer = rendered_question, rendered_answer
@@ -224,6 +227,7 @@ def _read_cards(
                 question=question,
                 answer=answer,
                 extra_fields=extra,
+                question_revealed=question_revealed,
             )
         )
     return cards
