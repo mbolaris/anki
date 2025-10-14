@@ -1,10 +1,9 @@
 """Utilities for loading flashcard content from Anki ``.apkg`` packages."""
 from __future__ import annotations
 
-import base64
 import json
-import mimetypes
 import re
+import shutil
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
@@ -58,13 +57,32 @@ class DeckCollection:
     """Container for all decks contained in an Anki collection."""
 
     decks: Dict[int, Deck]
+    media_directory: Path | None = None
+    media_filenames: Dict[str, str] = field(default_factory=dict)
+    media_url_path: str = "/media"
 
     @property
     def total_cards(self) -> int:
         return sum(len(deck.cards) for deck in self.decks.values())
 
+    def media_url_for(self, filename: str) -> str | None:
+        """Return the served URL for a media *filename* when available."""
 
-def load_collection(package_path: Path) -> DeckCollection:
+        stored = self.media_filenames.get(filename)
+        if not stored:
+            return None
+        base = self.media_url_path.rstrip("/")
+        if not base:
+            return stored
+        return f"{base}/{stored}"
+
+
+def load_collection(
+    package_path: Path,
+    *,
+    media_dir: Path | None = None,
+    media_url_path: str = "/media",
+) -> DeckCollection:
     """Load an Anki package and return the parsed cards grouped by deck."""
 
     if not package_path.exists():
@@ -74,11 +92,13 @@ def load_collection(package_path: Path) -> DeckCollection:
     # extracted SQLite file during cleanup on Windows, copy the collection
     # database out to a separate temporary file and open that copy instead.
     tmp_dir = tempfile.mkdtemp(prefix="anki_viewer_")
+    media_directory = media_dir or Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
+    _prepare_media_directory(media_directory)
     try:
         _extract_package(package_path, tmp_dir)
         extracted_path = Path(tmp_dir)
         collection_path = _find_collection_file(extracted_path)
-        media_map = _read_media(extracted_path)
+        media_map = _read_media(extracted_path, media_directory)
 
         # Copy the collection DB to a separate temp file outside the
         # extracted directory so we can safely close and remove the
@@ -88,7 +108,7 @@ def load_collection(package_path: Path) -> DeckCollection:
             import shutil
 
             shutil.copy2(collection_path, copy_path)
-            collection = _load_from_sqlite(copy_path, media_map)
+            collection = _load_from_sqlite(copy_path, media_map, media_url_path)
         finally:
             try:
                 Path(copy_path).unlink()
@@ -96,6 +116,9 @@ def load_collection(package_path: Path) -> DeckCollection:
                 # Best effort cleanup of the copied DB; ignore errors.
                 pass
 
+        collection.media_directory = media_directory
+        collection.media_filenames = media_map
+        collection.media_url_path = media_url_path
         return collection
     finally:
         # Best-effort cleanup of the extracted package directory. On
@@ -125,7 +148,7 @@ def _find_collection_file(extracted_path: Path) -> Path:
     raise DeckLoadError("collection.anki21 not found in package")
 
 
-def _read_media(extracted_path: Path) -> Dict[str, str]:
+def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:
     media_file = extracted_path / "media"
     if not media_file.exists():
         return {}
@@ -143,13 +166,18 @@ def _read_media(extracted_path: Path) -> Dict[str, str]:
         if not file_path.exists():
             continue
         try:
-            media_map[filename] = _encode_media_as_data_uri(file_path, filename)
+            stored_name = _store_media_file(destination, filename, file_path)
+            if not stored_name:
+                continue
+            media_map[filename] = stored_name
         except OSError:
             continue
     return media_map
 
 
-def _load_from_sqlite(collection_path: Path, media_map: Dict[str, str]) -> DeckCollection:
+def _load_from_sqlite(
+    collection_path: Path, media_map: Dict[str, str], media_url_path: str
+) -> DeckCollection:
     try:
         # Use the connection as a context manager so it is closed when we're
         # done reading. Also convert the cards generator to a list while the
@@ -158,7 +186,7 @@ def _load_from_sqlite(collection_path: Path, media_map: Dict[str, str]) -> DeckC
         with sqlite3.connect(str(collection_path)) as conn:
             conn.row_factory = sqlite3.Row
             deck_names = _read_deck_names(conn)
-            cards = _read_cards(conn, deck_names, media_map)
+            cards = _read_cards(conn, deck_names, media_map, media_url_path)
     except sqlite3.Error as exc:  # pragma: no cover - defensive programming
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
 
@@ -169,7 +197,7 @@ def _load_from_sqlite(collection_path: Path, media_map: Dict[str, str]) -> DeckC
     for deck in decks.values():
         deck.cards.sort(key=lambda c: (c.template_ordinal, c.card_id))
 
-    return DeckCollection(decks=decks)
+    return DeckCollection(decks=decks, media_filenames=media_map, media_url_path=media_url_path)
 
 
 def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
@@ -187,7 +215,10 @@ def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
 
 
 def _read_cards(
-    conn: sqlite3.Connection, deck_names: Dict[int, str], media_map: Dict[str, str]
+    conn: sqlite3.Connection,
+    deck_names: Dict[int, str],
+    media_map: Dict[str, str],
+    media_url_path: str,
 ) -> List[Card]:
     """Read all cards from the collection and return a list of Card objects.
 
@@ -209,10 +240,10 @@ def _read_cards(
     cards: List[Card] = []
     for row in rows:
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
-        question = _inline_media(fields[0], media_map) if fields else ""
-        answer = _inline_media(fields[1], media_map) if len(fields) > 1 else ""
+        question = _inline_media(fields[0], media_map, media_url_path) if fields else ""
+        answer = _inline_media(fields[1], media_map, media_url_path) if len(fields) > 1 else ""
         extra_values = fields[2:] if len(fields) > 2 else []
-        extra = [_inline_media(value, media_map) for value in extra_values]
+        extra = [_inline_media(value, media_map, media_url_path) for value in extra_values]
 
         card_preview = SimpleNamespace(
             question=question,
@@ -254,15 +285,7 @@ def _read_cards(
     return cards
 
 
-def _encode_media_as_data_uri(file_path: Path, filename: str) -> str:
-    mime_type, _ = mimetypes.guess_type(filename)
-    mime_type = mime_type or "application/octet-stream"
-    data = file_path.read_bytes()
-    encoded = base64.b64encode(data).decode("ascii")
-    return f"data:{mime_type};base64,{encoded}"
-
-
-def _inline_media(html: str, media_map: Dict[str, str]) -> str:
+def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> str:
     if not html or not media_map:
         return html
 
@@ -273,7 +296,8 @@ def _inline_media(html: str, media_map: Dict[str, str]) -> str:
         data_uri = media_map.get(filename)
         if not data_uri:
             return match.group(0)
-        return f"{prefix}{quote}{data_uri}{quote}"
+        url = _build_media_url(data_uri, media_url_path)
+        return f"{prefix}{quote}{url}{quote}"
 
     html = _IMG_SRC_PATTERN.sub(replacement, html)
 
@@ -284,9 +308,61 @@ def _inline_media(html: str, media_map: Dict[str, str]) -> str:
         data_uri = media_map.get(filename)
         if not data_uri:
             return match.group(0)
-        return f"{prefix}{data_uri}"
+        url = _build_media_url(data_uri, media_url_path)
+        return f"{prefix}{url}"
 
     return _UNQUOTED_IMG_SRC_PATTERN.sub(unquoted_replacement, html)
+
+
+def _build_media_url(stored_name: str, media_url_path: str) -> str:
+    base = media_url_path.rstrip("/")
+    if not base:
+        return stored_name
+    return f"{base}/{stored_name}"
+
+
+def _store_media_file(destination: Path, filename: str, source: Path) -> str | None:
+    safe_name = _sanitize_media_filename(filename)
+    if not safe_name:
+        return None
+
+    unique_name = _dedupe_filename(destination, safe_name)
+    try:
+        shutil.copy2(source, destination / unique_name)
+    except OSError:
+        return None
+    return unique_name
+
+
+def _sanitize_media_filename(filename: str) -> str:
+    name = Path(filename).name
+    if not name:
+        return "media"
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    return sanitized or "media"
+
+
+def _dedupe_filename(destination: Path, filename: str) -> str:
+    candidate = filename
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    counter = 1
+    while (destination / candidate).exists():
+        candidate = f"{stem}_{counter}{suffix}"
+        counter += 1
+    return candidate
+
+
+def _prepare_media_directory(destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    for entry in destination.iterdir():
+        try:
+            if entry.is_file() or entry.is_symlink():
+                entry.unlink()
+            elif entry.is_dir():
+                shutil.rmtree(entry)
+        except OSError:
+            continue
 
 
 def _render_cloze(html: str, *, reveal: bool) -> str:
