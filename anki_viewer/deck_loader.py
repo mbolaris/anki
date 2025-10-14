@@ -16,6 +16,7 @@ from zipfile import ZipFile
 _FIELD_SEPARATOR = "\x1f"
 _IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
 _UNQUOTED_IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)([^'\"\s>]+)", re.IGNORECASE)
+_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}", re.DOTALL)
 
 
 class DeckLoadError(RuntimeError):
@@ -203,6 +204,12 @@ def _read_cards(
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
         question = _inline_media(fields[0], media_map) if fields else ""
         answer = _inline_media(fields[1], media_map) if len(fields) > 1 else ""
+        if "{{c" in question:
+            rendered_question = _render_cloze(question, reveal=False)
+            rendered_answer = _render_cloze(question, reveal=True)
+            if answer.strip():
+                rendered_answer = f"{rendered_answer}<div class=\"cloze-extra-answer\">{answer}</div>"
+            question, answer = rendered_question, rendered_answer
         extra_values = fields[2:] if len(fields) > 2 else []
         extra = [_inline_media(value, media_map) for value in extra_values]
         deck_id = int(row["deck_id"])
@@ -255,6 +262,33 @@ def _inline_media(html: str, media_map: Dict[str, str]) -> str:
         return f"{prefix}{data_uri}"
 
     return _UNQUOTED_IMG_SRC_PATTERN.sub(unquoted_replacement, html)
+
+
+def _render_cloze(html: str, *, reveal: bool) -> str:
+    """Convert Anki cloze deletions to semantic HTML spans.
+
+    The default Anki cloze syntax (``{{c1::text::hint}}``) is transformed into
+    ``<span class="cloze">`` elements so the front side of the card shows a
+    blank (optionally with a hint) and the back side reveals the hidden text.
+    """
+
+    def replacement(match: re.Match[str]) -> str:
+        ordinal, content, hint = match.groups()
+        if reveal:
+            hint_html = ""
+            if hint:
+                hint_html = f'<span class="cloze-hint">({hint})</span>'
+            return (
+                f'<span class="cloze cloze-revealed" data-cloze="{ordinal}">'
+                f"{content}{hint_html}</span>"
+            )
+
+        placeholder = "&hellip;"
+        if hint:
+            placeholder = f'<span class="cloze-hint">{hint}</span>'
+        return f'<span class="cloze cloze-hidden" data-cloze="{ordinal}">{placeholder}</span>'
+
+    return _CLOZE_PATTERN.sub(replacement, html)
 
 
 __all__ = [
