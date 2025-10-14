@@ -101,18 +101,150 @@ body {
   font-weight: 500;
 }
 
-.card-grid {
-  margin-top: 2rem;
-  display: grid;
-  gap: 1.5rem;
-}
-
 .card {
   background-color: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 1rem;
   padding: 1.5rem;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+}
+
+.card-viewer {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.viewer-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .viewer-top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.card-counter {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 200px;
+}
+
+.progress-label {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 0.6rem;
+  border-radius: 999px;
+  background-color: rgba(37, 99, 235, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar__inner {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: linear-gradient(135deg, var(--accent), #3b82f6);
+  transition: width 0.3s ease;
+}
+
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .card-actions {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.control-buttons,
+.progress-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.control-button {
+  border-radius: 0.75rem;
+  border: 1px solid var(--card-border);
+  background-color: var(--card-bg);
+  color: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.control-button.secondary {
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  border-color: transparent;
+  color: white;
+}
+
+.control-button.ghost {
+  background-color: transparent;
+  border-color: rgba(37, 99, 235, 0.35);
+  color: var(--accent);
+}
+
+.control-button:hover,
+.control-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.2);
+  outline: none;
+}
+
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  box-shadow: none;
+  transform: none;
+}
+
+.control-button.key-pressed {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
+}
+
+.known-counter {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.card-stage {
+  position: relative;
+  min-height: 12rem;
+}
+
+.card-stage .card {
+  display: none;
+}
+
+.card-stage .card.is-active {
+  display: block;
 }
 
 .card header {
@@ -144,6 +276,18 @@ body {
   border-radius: 0.75rem;
   padding: 0.75rem;
   background-color: rgba(37, 99, 235, 0.05);
+}
+
+.card .card-face.answer {
+  display: none;
+}
+
+.card.revealed .card-face.answer {
+  display: block;
+}
+
+.card:not(.revealed) .extra-fields {
+  display: none;
 }
 
 .cloze {
@@ -234,4 +378,74 @@ body {
 .site-footer {
   text-align: center;
   font-size: 0.9rem;
+}
+
+.empty-state {
+  margin: 0;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.shortcut-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background-color: rgba(17, 24, 39, 0.55);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.2s ease;
+  opacity: 1;
+  z-index: 1000;
+}
+
+.shortcut-overlay[aria-hidden="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shortcut-overlay__content {
+  max-width: 420px;
+  width: 100%;
+  background-color: var(--card-bg);
+  color: inherit;
+  border-radius: 1rem;
+  border: 1px solid var(--card-border);
+  padding: 1.5rem;
+  box-shadow: 0 30px 45px rgba(0, 0, 0, 0.25);
+  outline: none;
+}
+
+.shortcut-overlay__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.shortcut-list {
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.shortcut-list dt {
+  font-weight: 600;
+}
+
+.shortcut-list dd {
+  margin: 0.2rem 0 0 0;
+  color: var(--muted);
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--card-border);
+  background-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
 }
