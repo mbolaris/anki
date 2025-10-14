@@ -1,15 +1,21 @@
 """Utilities for loading flashcard content from Anki ``.apkg`` packages."""
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
+import re
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List
+from urllib.parse import unquote
 from zipfile import ZipFile
 
 _FIELD_SEPARATOR = "\x1f"
+_IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
+_UNQUOTED_IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)([^'\"\s>]+)", re.IGNORECASE)
 
 
 class DeckLoadError(RuntimeError):
@@ -62,7 +68,9 @@ def load_collection(package_path: Path) -> DeckCollection:
     tmp_dir = tempfile.mkdtemp(prefix="anki_viewer_")
     try:
         _extract_package(package_path, tmp_dir)
-        collection_path = _find_collection_file(Path(tmp_dir))
+        extracted_path = Path(tmp_dir)
+        collection_path = _find_collection_file(extracted_path)
+        media_map = _read_media(extracted_path)
 
         # Copy the collection DB to a separate temp file outside the
         # extracted directory so we can safely close and remove the
@@ -72,7 +80,7 @@ def load_collection(package_path: Path) -> DeckCollection:
             import shutil
 
             shutil.copy2(collection_path, copy_path)
-            collection = _load_from_sqlite(copy_path)
+            collection = _load_from_sqlite(copy_path, media_map)
         finally:
             try:
                 Path(copy_path).unlink()
@@ -109,7 +117,31 @@ def _find_collection_file(extracted_path: Path) -> Path:
     raise DeckLoadError("collection.anki21 not found in package")
 
 
-def _load_from_sqlite(collection_path: Path) -> DeckCollection:
+def _read_media(extracted_path: Path) -> Dict[str, str]:
+    media_file = extracted_path / "media"
+    if not media_file.exists():
+        return {}
+
+    try:
+        manifest = json.loads(media_file.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DeckLoadError("Could not parse media manifest") from exc
+
+    media_map: Dict[str, str] = {}
+    for key, filename in manifest.items():
+        if not filename:
+            continue
+        file_path = extracted_path / key
+        if not file_path.exists():
+            continue
+        try:
+            media_map[filename] = _encode_media_as_data_uri(file_path, filename)
+        except OSError:
+            continue
+    return media_map
+
+
+def _load_from_sqlite(collection_path: Path, media_map: Dict[str, str]) -> DeckCollection:
     try:
         # Use the connection as a context manager so it is closed when we're
         # done reading. Also convert the cards generator to a list while the
@@ -118,7 +150,7 @@ def _load_from_sqlite(collection_path: Path) -> DeckCollection:
         with sqlite3.connect(str(collection_path)) as conn:
             conn.row_factory = sqlite3.Row
             deck_names = _read_deck_names(conn)
-            cards = _read_cards(conn, deck_names)
+            cards = _read_cards(conn, deck_names, media_map)
     except sqlite3.Error as exc:  # pragma: no cover - defensive programming
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
 
@@ -146,7 +178,9 @@ def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
     return {int(deck_id): data.get("name", str(deck_id)) for deck_id, data in decks_json.items()}
 
 
-def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> List[Card]:
+def _read_cards(
+    conn: sqlite3.Connection, deck_names: Dict[int, str], media_map: Dict[str, str]
+) -> List[Card]:
     """Read all cards from the collection and return a list of Card objects.
 
     This fetches all rows while the DB connection is open so no cursor or
@@ -167,9 +201,10 @@ def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> List[Ca
     cards: List[Card] = []
     for row in rows:
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
-        question = fields[0] if fields else ""
-        answer = fields[1] if len(fields) > 1 else ""
-        extra = fields[2:] if len(fields) > 2 else []
+        question = _inline_media(fields[0], media_map) if fields else ""
+        answer = _inline_media(fields[1], media_map) if len(fields) > 1 else ""
+        extra_values = fields[2:] if len(fields) > 2 else []
+        extra = [_inline_media(value, media_map) for value in extra_values]
         deck_id = int(row["deck_id"])
         deck_name = deck_names.get(deck_id, str(deck_id))
         cards.append(
@@ -185,6 +220,41 @@ def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> List[Ca
             )
         )
     return cards
+
+
+def _encode_media_as_data_uri(file_path: Path, filename: str) -> str:
+    mime_type, _ = mimetypes.guess_type(filename)
+    mime_type = mime_type or "application/octet-stream"
+    data = file_path.read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _inline_media(html: str, media_map: Dict[str, str]) -> str:
+    if not html or not media_map:
+        return html
+
+    def replacement(match: re.Match[str]) -> str:
+        prefix, quote, src = match.groups()
+        normalized = unquote(src)
+        filename = Path(normalized).name
+        data_uri = media_map.get(filename)
+        if not data_uri:
+            return match.group(0)
+        return f"{prefix}{quote}{data_uri}{quote}"
+
+    html = _IMG_SRC_PATTERN.sub(replacement, html)
+
+    def unquoted_replacement(match: re.Match[str]) -> str:
+        prefix, src = match.groups()
+        normalized = unquote(src)
+        filename = Path(normalized).name
+        data_uri = media_map.get(filename)
+        if not data_uri:
+            return match.group(0)
+        return f"{prefix}{data_uri}"
+
+    return _UNQUOTED_IMG_SRC_PATTERN.sub(unquoted_replacement, html)
 
 
 __all__ = [
