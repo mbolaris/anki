@@ -10,7 +10,9 @@
     <header class="site-header">
       <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
       {% if deck_collection %}
-        <p class="subtitle">{{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.</p>
+        <p class="subtitle">
+          {{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.
+        </p>
       {% endif %}
     </header>
     <main class="content">
