@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "card.html" as card_templates %}
 {% block title %}{{ deck.name }} · Anki Deck Viewer{% endblock %}
 {% block content %}
   <section class="deck-header">
@@ -53,62 +54,11 @@
         <div class="empty-state" data-role="empty-state" hidden>
           All cards are marked as known. Reset progress to start over.
         </div>
-        {% for card in deck.cards %}
-          <article
-            class="card"
-            data-card-id="{{ card.card_id }}"
-            data-card-type="{{ card.card_type }}"
-            {% if card.card_type == "cloze" %}
-              data-card-endpoint="{{ url_for('card_data', deck_id=deck.deck_id, card_id=card.card_id) }}"
-            {% endif %}
-          >
-            <header class="card-header">
-              <div class="card-header__primary">
-                <span class="card-pill card-pill--primary">Card {{ loop.index }}</span>
-                <span class="card-pill">Template {{ card.template_ordinal + 1 }}</span>
-              </div>
-              <dl class="card-meta">
-                <div class="card-meta__item">
-                  <dt>Note ID</dt>
-                  <dd>{{ card.note_id }}</dd>
-                </div>
-                <div class="card-meta__item">
-                  <dt>Card ID</dt>
-                  <dd>{{ card.card_id }}</dd>
-                </div>
-              </dl>
-            </header>
-            <div class="card-body">
-              <div class="card-face question">
-                <h4>Question</h4>
-                {% if card.card_type == "cloze" %}
-                  <p class="cloze-instructions">Click a blank to reveal the hidden text.</p>
-                {% endif %}
-                <div class="content{% if card.question_revealed %} has-revealed{% endif %}">
-                  <div class="question-front" aria-hidden="false">{{ card.question | safe }}</div>
-                  {% if card.question_revealed %}
-                    <div class="question-revealed" aria-hidden="true">{{ card.question_revealed | safe }}</div>
-                  {% endif %}
-                </div>
-              </div>
-              <div class="card-face answer">
-                <h4>Answer</h4>
-                <div class="content">{{ card.answer | safe }}</div>
-              </div>
-              {% if card.extra_fields %}
-                <details class="extra-fields">
-                  <summary>Additional fields</summary>
-                  <dl>
-                    {% for value in card.extra_fields %}
-                      <dt>Field {{ loop.index + 2 }}</dt>
-                      <dd>{{ value | safe }}</dd>
-                    {% endfor %}
-                  </dl>
-                </details>
-              {% endif %}
-            </div>
-          </article>
-        {% endfor %}
+          {% set counter = namespace(value=0) %}
+          {% for card in deck.cards %}
+            {% set counter.value = counter.value + 1 %}
+            {{ card_templates.render_card(card, deck, counter.value) }}
+          {% endfor %}
       {% else %}
         <p class="empty-state">No cards were found in this deck.</p>
       {% endif %}

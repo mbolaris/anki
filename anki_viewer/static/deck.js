@@ -77,6 +77,7 @@
     const clozeStateByCard = new Map();
 
     cardElements.forEach((card) => {
+      setupCardMedia(card);
       setupClozeCard(card);
     });
 
@@ -188,6 +189,56 @@
           state.loading = false;
         });
       return state.promise;
+    }
+
+    function setupCardMedia(card) {
+      if (!card || card.dataset.mediaSetup === "true") {
+        return;
+      }
+      const images = card.querySelectorAll("img");
+      images.forEach((img) => {
+        if (img instanceof HTMLImageElement) {
+          enhanceImageElement(img);
+        }
+      });
+      card.dataset.mediaSetup = "true";
+    }
+
+    function enhanceImageElement(img) {
+      if (!(img instanceof HTMLImageElement)) {
+        return;
+      }
+      if (img.closest("[data-media-wrapper]") || !img.parentNode) {
+        return;
+      }
+
+      const wrapper = document.createElement("span");
+      wrapper.className = "media-wrapper";
+      wrapper.setAttribute("data-media-wrapper", "true");
+      wrapper.dataset.state = "loading";
+
+      const parent = img.parentNode;
+      parent.insertBefore(wrapper, img);
+      wrapper.appendChild(img);
+
+      img.classList.add("card-image");
+      if (!img.hasAttribute("loading")) {
+        img.setAttribute("loading", "lazy");
+      }
+
+      function updateState() {
+        if (img.naturalWidth > 0) {
+          wrapper.dataset.state = "loaded";
+        } else if (img.complete) {
+          wrapper.dataset.state = "error";
+        } else {
+          wrapper.dataset.state = "loading";
+        }
+      }
+
+      img.addEventListener("load", updateState);
+      img.addEventListener("error", updateState);
+      updateState();
     }
 
     function revealClozeSpan(card, span) {

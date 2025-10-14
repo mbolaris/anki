@@ -1,0 +1,61 @@
+{% macro render_card(card, deck, card_number=None) %}
+  {% set is_image = card.card_type == "image" %}
+  {% set display_number = card_number if card_number is not none else card.card_id %}
+  <article
+    class="card{% if is_image %} card--image{% endif %}"
+    data-card-id="{{ card.card_id }}"
+    data-card-type="{{ card.card_type }}"
+    {% if card.card_type == "cloze" %}
+      data-card-endpoint="{{ url_for('card_data', deck_id=deck.deck_id, card_id=card.card_id) }}"
+    {% endif %}
+    {% if is_image %}data-has-images="true"{% endif %}
+  >
+    <header class="card-header">
+      <div class="card-header__primary">
+        <span class="card-pill card-pill--primary">Card {{ display_number }}</span>
+        <span class="card-pill">Template {{ card.template_ordinal + 1 }}</span>
+      </div>
+      <dl class="card-meta">
+        <div class="card-meta__item">
+          <dt>Note ID</dt>
+          <dd>{{ card.note_id }}</dd>
+        </div>
+        <div class="card-meta__item">
+          <dt>Card ID</dt>
+          <dd>{{ card.card_id }}</dd>
+        </div>
+      </dl>
+    </header>
+    <div class="card-body">
+      <div class="card-face question">
+        <h4>Question</h4>
+        {% if card.card_type == "cloze" %}
+          <p class="cloze-instructions">Click a blank to reveal the hidden text.</p>
+        {% elif is_image %}
+          <p class="image-instructions">Images are centered and scale to fit the card.</p>
+        {% endif %}
+        <div class="content{% if card.question_revealed %} has-revealed{% endif %}">
+          <div class="question-front" aria-hidden="false">{{ card.question | safe }}</div>
+          {% if card.question_revealed %}
+            <div class="question-revealed" aria-hidden="true">{{ card.question_revealed | safe }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-face answer">
+        <h4>Answer</h4>
+        <div class="content">{{ card.answer | safe }}</div>
+      </div>
+      {% if card.extra_fields %}
+        <details class="extra-fields">
+          <summary>Additional fields</summary>
+          <dl>
+            {% for value in card.extra_fields %}
+              <dt>Additional field</dt>
+              <dd>{{ value | safe }}</dd>
+            {% endfor %}
+          </dl>
+        </details>
+      {% endif %}
+    </div>
+  </article>
+{% endmacro %}
