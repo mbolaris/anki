@@ -29,3 +29,18 @@ A minimal Flask web server that renders flashcards from the
 The application automatically unpacks the Anki collection in a temporary
 location on startup, so you can update the package at any time by replacing the
 file and restarting the server.
+
+## Verifying the installation
+
+To make sure the application starts correctly after installing dependencies, you
+can perform a couple of quick checks:
+
+```bash
+python -m compileall anki_viewer app.py
+python scripts/smoke_test.py  # optionally pass a custom path to the deck file
+```
+
+The first command verifies all modules compile to bytecode. The smoke test
+loads the bundled sample deck (or a deck path you provide) and issues a couple
+of HTTP requests using Flask's test client to ensure both the index page and an
+individual deck respond successfully.
