@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ deck.name }} · Anki Deck Viewer{% endblock %}
+{% block content %}
+  <section class="deck-header">
+    <h2>{{ deck.name }}</h2>
+    <p>{{ deck.cards|length }} cards</p>
+    <a class="back-link" href="{{ url_for('index') }}">← Back to decks</a>
+  </section>
+
+  <section class="card-grid">
+    {% for card in deck.cards %}
+      <article class="card" data-card-id="{{ card.card_id }}">
+        <header>
+          <h3>Card {{ loop.index }}</h3>
+          <p class="metadata">Note {{ card.note_id }} · Template {{ card.template_ordinal + 1 }}</p>
+        </header>
+        <div class="card-body">
+          <div class="card-face question">
+            <h4>Question</h4>
+            <div class="content">{{ card.question | safe }}</div>
+          </div>
+          <div class="card-face answer">
+            <h4>Answer</h4>
+            <div class="content">{{ card.answer | safe }}</div>
+          </div>
+          {% if card.extra_fields %}
+            <details class="extra-fields">
+              <summary>Additional fields</summary>
+              <dl>
+                {% for value in card.extra_fields %}
+                  <dt>Field {{ loop.index + 2 }}</dt>
+                  <dd>{{ value | safe }}</dd>
+                {% endfor %}
+              </dl>
+            </details>
+          {% endif %}
+        </div>
+      </article>
+    {% else %}
+      <p>No cards were found in this deck.</p>
+    {% endfor %}
+  </section>
+{% endblock %}

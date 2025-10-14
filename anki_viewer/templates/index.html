@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Decks · Anki Deck Viewer{% endblock %}
+{% block content %}
+  <section class="deck-list">
+    <h2>Decks</h2>
+    {% if collection.decks %}
+      <ul>
+        {% for deck in collection.decks.values()|sort(attribute='name') %}
+          <li>
+            <a href="{{ url_for('deck', deck_id=deck.deck_id) }}">{{ deck.name }}</a>
+            <span class="count">{{ deck.cards|length }} cards</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No decks were found in the package.</p>
+    {% endif %}
+  </section>
+{% endblock %}

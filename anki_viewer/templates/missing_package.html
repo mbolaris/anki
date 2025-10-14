@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Package missing · Anki Deck Viewer{% endblock %}
+{% block content %}
+  <section class="notice">
+    <h2>Deck package not found</h2>
+    <p>
+      The expected Anki package could not be loaded. Place the file
+      <code>{{ package_path }}</code> on disk and restart the server.
+    </p>
+    <p>
+      You can obtain the <strong>MCAT_High_Yield.apkg</strong> file from the
+      original source and copy it into the <code>data/</code> directory of this
+      project.
+    </p>
+  </section>
+{% endblock %}
