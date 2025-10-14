@@ -7,37 +7,133 @@
     <a class="back-link" href="{{ url_for('index') }}">← Back to decks</a>
   </section>
 
-  <section class="card-grid">
-    {% for card in deck.cards %}
-      <article class="card" data-card-id="{{ card.card_id }}">
-        <header>
-          <h3>Card {{ loop.index }}</h3>
-          <p class="metadata">Note {{ card.note_id }} · Template {{ card.template_ordinal + 1 }}</p>
-        </header>
-        <div class="card-body">
-          <div class="card-face question">
-            <h4>Question</h4>
-            <div class="content">{{ card.question | safe }}</div>
-          </div>
-          <div class="card-face answer">
-            <h4>Answer</h4>
-            <div class="content">{{ card.answer | safe }}</div>
-          </div>
-          {% if card.extra_fields %}
-            <details class="extra-fields">
-              <summary>Additional fields</summary>
-              <dl>
-                {% for value in card.extra_fields %}
-                  <dt>Field {{ loop.index + 2 }}</dt>
-                  <dd>{{ value | safe }}</dd>
-                {% endfor %}
-              </dl>
-            </details>
-          {% endif %}
+  <section
+    class="card-viewer"
+    data-deck-id="{{ deck.deck_id }}"
+    data-total-cards="{{ deck.cards|length }}"
+  >
+    <div class="viewer-top">
+      <p class="card-counter" data-role="counter" aria-live="polite">
+        {% if deck.cards %}Card 1 of {{ deck.cards|length }}{% else %}No cards available{% endif %}
+      </p>
+      <div class="progress-wrapper">
+        <span class="progress-label" data-role="progress-percent">0% viewed</span>
+        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-bar__inner"></div>
         </div>
-      </article>
-    {% else %}
-      <p>No cards were found in this deck.</p>
-    {% endfor %}
+      </div>
+    </div>
+
+    <div class="card-actions">
+      <div class="control-buttons">
+        <button type="button" class="control-button" data-action="prev">Previous</button>
+        <button type="button" class="control-button" data-action="flip">Flip</button>
+        <button type="button" class="control-button" data-action="next">Next</button>
+        <button type="button" class="control-button" data-action="random">Random</button>
+      </div>
+      <div class="progress-buttons">
+        <button type="button" class="control-button secondary" data-action="mark-known">Mark as known</button>
+        <button type="button" class="control-button ghost" data-action="reset-progress">Reset progress</button>
+        <button
+          type="button"
+          class="control-button ghost"
+          data-action="toggle-help"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+        >
+          Keyboard shortcuts
+        </button>
+      </div>
+    </div>
+
+    <p class="known-counter" data-role="known-count">0 cards marked as known</p>
+
+    <div class="card-stage">
+      {% if deck.cards %}
+        <div class="empty-state" data-role="empty-state" hidden>
+          All cards are marked as known. Reset progress to start over.
+        </div>
+        {% for card in deck.cards %}
+          <article class="card" data-card-id="{{ card.card_id }}">
+            <header>
+              <h3>Card {{ loop.index }}</h3>
+              <p class="metadata">Note {{ card.note_id }} · Template {{ card.template_ordinal + 1 }}</p>
+            </header>
+            <div class="card-body">
+              <div class="card-face question">
+                <h4>Question</h4>
+                <div class="content">{{ card.question | safe }}</div>
+              </div>
+              <div class="card-face answer">
+                <h4>Answer</h4>
+                <div class="content">{{ card.answer | safe }}</div>
+              </div>
+              {% if card.extra_fields %}
+                <details class="extra-fields">
+                  <summary>Additional fields</summary>
+                  <dl>
+                    {% for value in card.extra_fields %}
+                      <dt>Field {{ loop.index + 2 }}</dt>
+                      <dd>{{ value | safe }}</dd>
+                    {% endfor %}
+                  </dl>
+                </details>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      {% else %}
+        <p class="empty-state">No cards were found in this deck.</p>
+      {% endif %}
+    </div>
   </section>
+
+  <div
+    class="shortcut-overlay"
+    data-role="shortcut-overlay"
+    aria-hidden="true"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="shortcut-overlay-title"
+  >
+    <div class="shortcut-overlay__content" tabindex="-1">
+      <header class="shortcut-overlay__header">
+        <h3 id="shortcut-overlay-title">Keyboard shortcuts</h3>
+        <button type="button" class="control-button ghost" data-action="close-help" aria-label="Close help">
+          Close
+        </button>
+      </header>
+      <dl class="shortcut-list">
+        <div>
+          <dt><kbd>Space</kbd> / <kbd>Enter</kbd></dt>
+          <dd>Flip the current card</dd>
+        </div>
+        <div>
+          <dt><kbd>→</kbd> / <kbd>N</kbd></dt>
+          <dd>Go to the next card</dd>
+        </div>
+        <div>
+          <dt><kbd>←</kbd> / <kbd>P</kbd></dt>
+          <dd>Go to the previous card</dd>
+        </div>
+        <div>
+          <dt><kbd>R</kbd></dt>
+          <dd>Jump to a random card</dd>
+        </div>
+        <div>
+          <dt><kbd>?</kbd></dt>
+          <dd>Toggle this help overlay</dd>
+        </div>
+        <div>
+          <dt><kbd>Esc</kbd></dt>
+          <dd>Close the help overlay</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='deck.js') }}" defer></script>
 {% endblock %}
