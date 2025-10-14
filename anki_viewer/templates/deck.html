@@ -55,9 +55,21 @@
         </div>
         {% for card in deck.cards %}
           <article class="card" data-card-id="{{ card.card_id }}">
-            <header>
-              <h3>Card {{ loop.index }}</h3>
-              <p class="metadata">Note {{ card.note_id }} · Template {{ card.template_ordinal + 1 }}</p>
+            <header class="card-header">
+              <div class="card-header__primary">
+                <span class="card-pill card-pill--primary">Card {{ loop.index }}</span>
+                <span class="card-pill">Template {{ card.template_ordinal + 1 }}</span>
+              </div>
+              <dl class="card-meta">
+                <div class="card-meta__item">
+                  <dt>Note ID</dt>
+                  <dd>{{ card.note_id }}</dd>
+                </div>
+                <div class="card-meta__item">
+                  <dt>Card ID</dt>
+                  <dd>{{ card.card_id }}</dd>
+                </div>
+              </dl>
             </header>
             <div class="card-body">
               <div class="card-face question">
