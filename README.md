@@ -13,8 +13,10 @@ A minimal Flask web server that renders flashcards from the
    pip install -r requirements.txt
    ```
 
-2. Copy the `MCAT_High_Yield.apkg` file into the `data/` directory located at
-   the root of this repository (the file is ignored by Git).
+2. Copy the Anki deck into the `data/` directory located at the root of this
+   repository (the file is ignored by Git). The application prefers the
+   `MCAT_High_Yield.apkg` filename but also recognizes the original export name
+   `MCAT High Yield.apkg` (hyphenated variations work as well).
 
 3. Start the server:
 
