@@ -83,6 +83,8 @@
 
     const cardById = new Map(cardElements.map((card) => [card.dataset.cardId, card]));
     const counterEl = viewer.querySelector('[data-role="counter"]');
+    const counterCurrent = counterEl ? counterEl.querySelector('[data-role="counter-current"]') : null;
+    const counterTotal = counterEl ? counterEl.querySelector('[data-role="counter-total"]') : null;
     const progressLabel = viewer.querySelector('[data-role="progress-percent"]');
     const progressBar = viewer.querySelector(".progress-bar");
     const progressBarInner = viewer.querySelector(".progress-bar__inner");
@@ -90,6 +92,12 @@
     const emptyState = viewer.querySelector('[data-role="empty-state"]');
     const helpToggleButton = viewer.querySelector('[data-action="toggle-help"]');
     const helpOverlay = document.querySelector('[data-role="shortcut-overlay"]');
+    const cardTypeIndicator = viewer.querySelector('[data-role="card-type"]');
+    const cardStage = viewer.querySelector('[data-role="card-stage"]');
+
+    if (counterTotal) {
+      counterTotal.textContent = String(totalCards);
+    }
 
     const viewedKey = `deck-${deckId}-viewed`;
     const knownKey = `deck-${deckId}-known`;
@@ -375,13 +383,8 @@
 
     const keyToAction = new Map([
       [" ", "flip"],
-      ["Enter", "flip"],
       ["ArrowRight", "next"],
-      ["n", "next"],
-      ["N", "next"],
       ["ArrowLeft", "prev"],
-      ["p", "prev"],
-      ["P", "prev"],
       ["r", "random"],
       ["R", "random"],
     ]);
@@ -410,6 +413,31 @@
       return cardById.get(cardId) ?? null;
     }
 
+    function updateCardTypeIndicator(card) {
+      if (!cardTypeIndicator) {
+        if (card && card.dataset.cardType) {
+          viewer.dataset.activeCardType = card.dataset.cardType;
+        } else {
+          delete viewer.dataset.activeCardType;
+        }
+        return;
+      }
+
+      const type = card && card.dataset.cardType ? card.dataset.cardType : "";
+      if (!type) {
+        cardTypeIndicator.hidden = true;
+        cardTypeIndicator.textContent = "";
+        cardTypeIndicator.removeAttribute("data-card-type");
+        delete viewer.dataset.activeCardType;
+        return;
+      }
+
+      cardTypeIndicator.hidden = false;
+      cardTypeIndicator.textContent = type.toUpperCase();
+      cardTypeIndicator.setAttribute("data-card-type", type);
+      viewer.dataset.activeCardType = type;
+    }
+
     function updateQuestionVisibility(card) {
       if (!card) {
         return;
@@ -430,17 +458,21 @@
     }
 
     function setCardActive(cardId) {
+      let activeCard = null;
       cardElements.forEach((card) => {
         const isActive = card.dataset.cardId === cardId;
         card.classList.toggle("is-active", isActive);
         if (!isActive) {
           card.classList.remove("revealed");
+        } else {
+          activeCard = card;
         }
         updateQuestionVisibility(card);
       });
       if (cardId) {
         markViewed(cardId);
       }
+      updateCardTypeIndicator(activeCard);
     }
 
     function updateCounter() {
@@ -448,10 +480,20 @@
         return;
       }
       if (activeCardIds.length === 0) {
-        counterEl.textContent = "All cards marked as known";
+        counterEl.dataset.state = "empty";
+        if (counterCurrent) {
+          counterCurrent.textContent = "0";
+        }
         return;
       }
-      counterEl.textContent = `Card ${currentIndex + 1} of ${activeCardIds.length}`;
+      counterEl.dataset.state = "active";
+      const activeCard = getActiveCardElement();
+      const position = activeCard && activeCard.dataset.cardPosition
+        ? Number.parseInt(activeCard.dataset.cardPosition, 10)
+        : currentIndex + 1;
+      if (counterCurrent) {
+        counterCurrent.textContent = String(position);
+      }
     }
 
     function updateKnownCount() {
@@ -472,10 +514,16 @@
       if (!progressBar || !progressBarInner || !progressLabel) {
         return;
       }
-      const percent = totalCards === 0 ? 0 : Math.round((viewedSet.size / totalCards) * 100);
+      if (totalCards === 0) {
+        progressBarInner.style.width = "0%";
+        progressBar.setAttribute("aria-valuenow", "0");
+        progressLabel.textContent = "No cards available";
+        return;
+      }
+      const percent = Math.round((viewedSet.size / totalCards) * 100);
       progressBarInner.style.width = `${percent}%`;
       progressBar.setAttribute("aria-valuenow", String(percent));
-      progressLabel.textContent = `${percent}% viewed`;
+      progressLabel.textContent = `${viewedSet.size} / ${totalCards} viewed (${percent}%)`;
     }
 
     function updateControlsState() {
@@ -511,6 +559,7 @@
           card.classList.remove("is-active", "revealed");
           updateQuestionVisibility(card);
         });
+        updateCardTypeIndicator(null);
         showEmptyStateIfNeeded();
         updateCounter();
         updateControlsState();
@@ -700,6 +749,38 @@
         flashControl(action);
       }
     });
+
+    if (cardStage) {
+      cardStage.addEventListener("click", (event) => {
+        if (isHelpOpen()) {
+          return;
+        }
+        const rawTarget = event.target;
+        if (!(rawTarget instanceof HTMLElement)) {
+          return;
+        }
+        const activeCard = getActiveCardElement();
+        if (!activeCard || !activeCard.contains(rawTarget)) {
+          return;
+        }
+        if (rawTarget.closest("a, button, summary, details")) {
+          return;
+        }
+        if (rawTarget.closest(".extra-fields")) {
+          return;
+        }
+        const clozeTarget = rawTarget.closest(".cloze");
+        if (clozeTarget instanceof HTMLElement && clozeTarget.classList.contains("cloze-hidden")) {
+          return;
+        }
+        const selection = window.getSelection();
+        if (selection && selection.toString().trim() !== "") {
+          return;
+        }
+        performAction("flip");
+        flashControl("flip");
+      });
+    }
 
     if (helpOverlay) {
       helpOverlay.addEventListener("click", (event) => {
