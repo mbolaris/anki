@@ -62,7 +62,12 @@
             <div class="card-body">
               <div class="card-face question">
                 <h4>Question</h4>
-                <div class="content">{{ card.question | safe }}</div>
+                <div class="content{% if card.question_revealed %} has-revealed{% endif %}">
+                  <div class="question-front" aria-hidden="false">{{ card.question | safe }}</div>
+                  {% if card.question_revealed %}
+                    <div class="question-revealed" aria-hidden="true">{{ card.question_revealed | safe }}</div>
+                  {% endif %}
+                </div>
               </div>
               <div class="card-face answer">
                 <h4>Answer</h4>

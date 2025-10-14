@@ -140,6 +140,25 @@
       return cardById.get(cardId) ?? null;
     }
 
+    function updateQuestionVisibility(card) {
+      if (!card) {
+        return;
+      }
+      const questionContent = card.querySelector(".card-face.question .content.has-revealed");
+      if (!questionContent) {
+        return;
+      }
+      const front = questionContent.querySelector(".question-front");
+      const revealed = questionContent.querySelector(".question-revealed");
+      const isRevealed = card.classList.contains("revealed");
+      if (front) {
+        front.setAttribute("aria-hidden", isRevealed ? "true" : "false");
+      }
+      if (revealed) {
+        revealed.setAttribute("aria-hidden", isRevealed ? "false" : "true");
+      }
+    }
+
     function setCardActive(cardId) {
       cardElements.forEach((card) => {
         const isActive = card.dataset.cardId === cardId;
@@ -147,6 +166,7 @@
         if (!isActive) {
           card.classList.remove("revealed");
         }
+        updateQuestionVisibility(card);
       });
       if (cardId) {
         markViewed(cardId);
@@ -219,6 +239,7 @@
         currentIndex = -1;
         cardElements.forEach((card) => {
           card.classList.remove("is-active", "revealed");
+          updateQuestionVisibility(card);
         });
         showEmptyStateIfNeeded();
         updateCounter();
@@ -240,6 +261,7 @@
         return;
       }
       card.classList.toggle("revealed");
+      updateQuestionVisibility(card);
     }
 
     function goToNext() {
@@ -278,6 +300,7 @@
       if (card) {
         card.classList.add("is-known");
         card.classList.remove("is-active", "revealed");
+        updateQuestionVisibility(card);
       }
       activeCardIds = activeCardIds.filter((id) => id !== cardId);
       updateKnownCount();
@@ -296,6 +319,7 @@
       removeFromStorage(knownKey);
       activeCardIds = cardElements.map((card) => {
         card.classList.remove("is-known", "revealed");
+        updateQuestionVisibility(card);
         return card.dataset.cardId;
       });
       updateProgress();

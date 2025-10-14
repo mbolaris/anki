@@ -278,6 +278,23 @@ body {
   background-color: rgba(37, 99, 235, 0.05);
 }
 
+.card-face .content.has-revealed .question-front,
+.card-face .content.has-revealed .question-revealed {
+  display: block;
+}
+
+.card-face .content.has-revealed .question-revealed {
+  display: none;
+}
+
+.card.revealed .card-face .content.has-revealed .question-front {
+  display: none;
+}
+
+.card.revealed .card-face .content.has-revealed .question-revealed {
+  display: block;
+}
+
 .card .card-face.answer {
   display: none;
 }
