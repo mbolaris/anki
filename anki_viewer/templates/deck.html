@@ -2,132 +2,128 @@
 {% import "card.html" as card_templates %}
 {% block title %}{{ deck.name }} · Anki Deck Viewer{% endblock %}
 {% block content %}
-  <section class="deck-header">
-    <div class="deck-header__group">
-      <a class="deck-header__back" href="{{ url_for('index') }}" aria-label="Back to decks">
-        ← All decks
-      </a>
-      <h2>{{ deck.name }}</h2>
-      <p class="deck-header__count">{{ deck.cards|length }} cards</p>
-    </div>
-  </section>
-
   <section
     class="card-viewer"
     data-deck-id="{{ deck.deck_id }}"
     data-total-cards="{{ deck.cards|length }}"
     data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
+    data-density="compact"
   >
-    <div class="viewer-top">
-      <div class="viewer-top__primary">
-        <p class="card-counter" data-role="counter" data-state="{% if deck.cards %}active{% else %}empty{% endif %}" aria-live="polite">
-          <span class="card-counter__value" data-role="counter-value">
-            <span data-role="counter-current">{% if deck.cards %}1{% else %}0{% endif %}</span>
-            <span aria-hidden="true">/</span>
-            <span data-role="counter-total">{{ deck.cards|length }}</span>
+    <header class="study-header">
+      <div class="study-header__inner">
+        <a class="study-header__crumb" href="{{ url_for('index') }}" aria-label="Back to deck list">
+          ← Decks
+        </a>
+        <span class="study-header__separator" aria-hidden="true">/</span>
+        <h2 class="study-header__title">{{ deck.name }}</h2>
+        <div class="study-header__spacer" aria-hidden="true"></div>
+        <div class="study-header__stats">
+          <p class="study-header__counter" data-role="counter" data-state="{% if deck.cards %}active{% else %}empty{% endif %}" aria-live="polite">
+            <span class="study-header__counter-value" data-role="counter-value">
+              <span data-role="counter-current">{% if deck.cards %}1{% else %}0{% endif %}</span>
+              <span aria-hidden="true">/</span>
+              <span data-role="counter-total">{{ deck.cards|length }}</span>
+            </span>
+            <span class="study-header__counter-empty" data-role="counter-empty">All cards marked as known</span>
+          </p>
+          <span class="study-header__progress-text" data-role="progress-percent">
+            {% if deck.cards %}0 / {{ deck.cards|length }} viewed • 0%{% else %}No cards available{% endif %}
           </span>
-          <span class="card-counter__empty" data-role="counter-empty">All cards marked as known</span>
-        </p>
-        <span class="card-type-indicator" data-role="card-type"{% if not deck.cards %} hidden{% endif %}>
-          {% if deck.cards %}{{ deck.cards[0].card_type|upper }}{% endif %}
-        </span>
+        </div>
       </div>
-      <div class="viewer-top__progress">
+      <div class="study-header__progress">
         <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div class="progress-bar__inner"></div>
         </div>
-        <span class="progress-label" data-role="progress-percent">
-          {% if deck.cards %}0 / {{ deck.cards|length }} viewed (0%){% else %}No cards available{% endif %}
+      </div>
+    </header>
+
+    <nav class="study-toolbar" aria-label="Card controls">
+      <div class="study-toolbar__inner">
+        <div class="toolbar-group" role="group" aria-label="Navigate cards">
+          <button type="button" class="toolbar-button" data-action="prev" title="Previous card (←)">
+            <span class="toolbar-button__icon" aria-hidden="true">⟵</span>
+            <span class="toolbar-button__label">Prev</span>
+            <span class="toolbar-button__hint" aria-hidden="true">←</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="next" title="Next card (→)">
+            <span class="toolbar-button__icon" aria-hidden="true">⟶</span>
+            <span class="toolbar-button__label">Next</span>
+            <span class="toolbar-button__hint" aria-hidden="true">→</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="flip" title="Flip card (Space / F)">
+            <span class="toolbar-button__icon" aria-hidden="true">⤾</span>
+            <span class="toolbar-button__label">Flip</span>
+            <span class="toolbar-button__hint" aria-hidden="true">Space</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="toggle-shuffle" title="Shuffle order">
+            <span class="toolbar-button__icon" aria-hidden="true">⇋</span>
+            <span class="toolbar-button__label">Shuffle</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="random" title="Random card (R)">
+            <span class="toolbar-button__icon" aria-hidden="true">🎲</span>
+            <span class="toolbar-button__label">Random</span>
+            <span class="toolbar-button__hint" aria-hidden="true">R</span>
+          </button>
+        </div>
+        <div class="toolbar-group" role="group" aria-label="Progress">
+          <button type="button" class="toolbar-button toolbar-button--primary" data-action="mark-known" title="Mark card as known (K)">
+            <span class="toolbar-button__icon" aria-hidden="true">✓</span>
+            <span class="toolbar-button__label">Known</span>
+            <span class="toolbar-button__hint" aria-hidden="true">K</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
+            <span class="toolbar-button__icon" aria-hidden="true">↺</span>
+            <span class="toolbar-button__label">Reset</span>
+          </button>
+        </div>
+        <div class="toolbar-group toolbar-group--end" role="group" aria-label="Display options">
+          <button type="button" class="toolbar-button" data-action="toggle-density" aria-pressed="true" title="Toggle density">
+            <span class="toolbar-button__icon" aria-hidden="true">⇕</span>
+            <span class="toolbar-button__label">Compact</span>
+          </button>
+          <button
+            type="button"
+            class="toolbar-button"
+            data-action="toggle-help"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            title="Keyboard shortcuts (?)"
+          >
+            <span class="toolbar-button__icon" aria-hidden="true">?</span>
+            <span class="toolbar-button__label">Shortcuts</span>
+            <span class="toolbar-button__hint" aria-hidden="true">?</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="toggle-fullscreen" title="Enter fullscreen">
+            <span class="toolbar-button__icon" aria-hidden="true">⛶</span>
+            <span class="toolbar-button__label">Fullscreen</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="study-body">
+      <div class="study-status">
+        <p class="known-counter" data-role="known-count">0 cards marked as known</p>
+        <span class="card-type-chip" data-role="card-type"{% if not deck.cards %} hidden{% endif %}>
+          {% if deck.cards %}{{ deck.cards[0].card_type|title }} card{% endif %}
         </span>
       </div>
-    </div>
 
-    <div class="viewer-status">
-      <p class="known-counter" data-role="known-count">0 cards marked as known</p>
-      <button
-        type="button"
-        class="control-button control-button--ghost control-button--compact"
-        data-action="toggle-help"
-        aria-haspopup="dialog"
-        aria-expanded="false"
-      >
-        <span class="control-button__icon" aria-hidden="true">?</span>
-        <span class="control-button__label">Keyboard shortcuts</span>
-      </button>
-    </div>
-
-    <div class="card-actions">
-      <div class="control-buttons" role="group" aria-label="Card navigation">
-        <button type="button" class="control-button" data-action="prev">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M15.5 5.5a1 1 0 0 1 0 1.4L10.4 12l5.1 5.1a1 1 0 1 1-1.4 1.4l-5.8-5.8a1 1 0 0 1 0-1.4l5.8-5.8a1 1 0 0 1 1.4 0z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Previous</span>
-          <span class="control-button__shortcut" aria-hidden="true">←</span>
-        </button>
-        <button type="button" class="control-button control-button--emphasis" data-action="flip">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 12a8 8 0 0 1 13.66-5.66l1.41-1.41A10 10 0 0 0 2 12h2zm16 0a8 8 0 0 1-13.66 5.66l-1.41 1.41A10 10 0 0 0 22 12h-2z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Flip</span>
-          <span class="control-button__shortcut" aria-hidden="true">Space</span>
-        </button>
-        <button type="button" class="control-button" data-action="random">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M17 3h4v4h-2V5.41l-5.29 5.3a2 2 0 0 1-2.83 0l-2.3-2.3L4 17.59V19H2v-2.59l6.29-6.3a2 2 0 0 1 2.83 0l2.3 2.3L19 6.41V5h-2V3zm-2 10.59 2.3 2.3L17 15h4v4h-4v-2.41l-2.3-2.3 1.41-1.41z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Random</span>
-          <span class="control-button__shortcut" aria-hidden="true">R</span>
-        </button>
-        <button type="button" class="control-button" data-action="next">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M8.5 5.5a1 1 0 0 1 1.4 0l5.8 5.8a1 1 0 0 1 0 1.4l-5.8 5.8a1 1 0 0 1-1.4-1.4L13.6 12 8.5 6.9a1 1 0 0 1 0-1.4z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Next</span>
-          <span class="control-button__shortcut" aria-hidden="true">→</span>
-        </button>
+      <div class="card-stage" data-role="card-stage">
+        {% if deck.cards %}
+          <div class="empty-state" data-role="empty-state" hidden>
+            All cards are marked as known. Reset progress to start over.
+          </div>
+          {% set counter = namespace(value=0) %}
+          {% for card in deck.cards %}
+            {% set counter.value = counter.value + 1 %}
+            {{ card_templates.render_card(card, deck, counter.value) }}
+          {% endfor %}
+        {% else %}
+          <p class="empty-state">No cards were found in this deck.</p>
+        {% endif %}
       </div>
-      <div class="progress-buttons" role="group" aria-label="Progress controls">
-        <button type="button" class="control-button control-button--primary" data-action="mark-known">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M9.5 17.5 4 12l1.41-1.41L9.5 14.67l9.09-9.09L20 7l-10.5 10.5z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Mark as known</span>
-        </button>
-        <button type="button" class="control-button control-button--ghost" data-action="reset-progress">
-          <span class="control-button__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M12 6V3L8 7l4 4V8a4 4 0 1 1-4 4H6a6 6 0 1 0 6-6z" />
-            </svg>
-          </span>
-          <span class="control-button__label">Reset progress</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="card-stage" data-role="card-stage">
-      {% if deck.cards %}
-        <div class="empty-state" data-role="empty-state" hidden>
-          All cards are marked as known. Reset progress to start over.
-        </div>
-        {% set counter = namespace(value=0) %}
-        {% for card in deck.cards %}
-          {% set counter.value = counter.value + 1 %}
-          {{ card_templates.render_card(card, deck, counter.value) }}
-        {% endfor %}
-      {% else %}
-        <p class="empty-state">No cards were found in this deck.</p>
-      {% endif %}
     </div>
   </section>
 
@@ -142,13 +138,13 @@
     <div class="shortcut-overlay__content" tabindex="-1">
       <header class="shortcut-overlay__header">
         <h3 id="shortcut-overlay-title">Keyboard shortcuts</h3>
-        <button type="button" class="control-button control-button--ghost" data-action="close-help" aria-label="Close help">
+        <button type="button" class="toolbar-button" data-action="close-help" aria-label="Close help">
           Close
         </button>
       </header>
       <dl class="shortcut-list">
         <div>
-          <dt><kbd>Space</kbd> / Click</dt>
+          <dt><kbd>Space</kbd> / <kbd>F</kbd> / Click</dt>
           <dd>Flip the current card</dd>
         </div>
         <div>
@@ -164,12 +160,16 @@
           <dd>Jump to a random card</dd>
         </div>
         <div>
+          <dt><kbd>K</kbd></dt>
+          <dd>Mark the current card as known</dd>
+        </div>
+        <div>
           <dt><kbd>?</kbd></dt>
           <dd>Toggle this help overlay</dd>
         </div>
         <div>
           <dt><kbd>Esc</kbd></dt>
-          <dd>Close the help overlay</dd>
+          <dd>Close dialogs or exit fullscreen</dd>
         </div>
       </dl>
     </div>
