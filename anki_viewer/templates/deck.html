@@ -3,102 +3,102 @@
 {% block title %}{{ deck.name }} · Anki Deck Viewer{% endblock %}
 {% block main_class %}viewer{% endblock %}
 {% block content %}
-  <section
-    class="card-viewer"
-    data-deck-id="{{ deck.deck_id }}"
-    data-total-cards="{{ deck.cards|length }}"
-    data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
-  >
-    <div class="viewer__chrome">
-      <header class="study-header">
-      <div class="study-header__inner">
-        <a class="study-header__crumb" href="{{ url_for('index') }}" aria-label="Back to deck list">
-          ← Decks
-        </a>
-        <span class="study-header__separator" aria-hidden="true">/</span>
-        <h2 class="study-header__title">{{ deck.name }}</h2>
-        <div class="study-header__spacer" aria-hidden="true"></div>
-        <div class="study-header__stats">
-          <p class="study-header__counter" data-role="counter" data-state="{% if deck.cards %}active{% else %}empty{% endif %}" aria-live="polite">
-            <span class="study-header__counter-value" data-role="counter-value">
-              <span data-role="counter-current">{% if deck.cards %}1{% else %}0{% endif %}</span>
-              <span aria-hidden="true">/</span>
-              <span data-role="counter-total">{{ deck.cards|length }}</span>
-            </span>
-            <span class="study-header__counter-empty" data-role="counter-empty">All cards marked as known</span>
-          </p>
-          <span class="study-header__progress-text" data-role="progress-percent">
-            {% if deck.cards %}0 / {{ deck.cards|length }} viewed • 0%{% else %}No cards available{% endif %}
-          </span>
-        </div>
-      </div>
-      <div class="study-header__progress">
-        <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-          <div class="progress-bar__inner"></div>
-        </div>
-      </div>
-      </header>
+    <section
+      class="card-viewer"
+      data-deck-id="{{ deck.deck_id }}"
+      data-total-cards="{{ deck.cards|length }}"
+      data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
+    >
+      <div class="viewer__toolbar">
+        <header class="study-header">
+          <div class="study-header__inner">
+            <a class="study-header__crumb" href="{{ url_for('index') }}" aria-label="Back to deck list">
+              ← Decks
+            </a>
+            <span class="study-header__separator" aria-hidden="true">/</span>
+            <h2 class="study-header__title">{{ deck.name }}</h2>
+            <div class="study-header__spacer" aria-hidden="true"></div>
+            <div class="study-header__stats">
+              <p class="study-header__counter" data-role="counter" data-state="{% if deck.cards %}active{% else %}empty{% endif %}" aria-live="polite">
+                <span class="study-header__counter-value" data-role="counter-value">
+                  <span data-role="counter-current">{% if deck.cards %}1{% else %}0{% endif %}</span>
+                  <span aria-hidden="true">/</span>
+                  <span data-role="counter-total">{{ deck.cards|length }}</span>
+                </span>
+                <span class="study-header__counter-empty" data-role="counter-empty">All cards marked as known</span>
+              </p>
+              <span class="study-header__progress-text" data-role="progress-percent">
+                {% if deck.cards %}0 / {{ deck.cards|length }} viewed • 0%{% else %}No cards available{% endif %}
+              </span>
+            </div>
+          </div>
+          <div class="study-header__progress">
+            <div class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-bar__inner"></div>
+            </div>
+          </div>
+        </header>
 
-      <nav class="study-toolbar" aria-label="Card controls">
-      <div class="study-toolbar__inner">
-        <div class="toolbar-group" role="group" aria-label="Navigate cards">
-          <button type="button" class="toolbar-button" data-action="prev" title="Previous card (←)">
-            <span class="toolbar-button__icon" aria-hidden="true">⟵</span>
-            <span class="toolbar-button__label">Prev</span>
-            <span class="toolbar-button__hint" aria-hidden="true">←</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="next" title="Next card (→)">
-            <span class="toolbar-button__icon" aria-hidden="true">⟶</span>
-            <span class="toolbar-button__label">Next</span>
-            <span class="toolbar-button__hint" aria-hidden="true">→</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="flip" title="Flip card (Space / F)">
-            <span class="toolbar-button__icon" aria-hidden="true">⤾</span>
-            <span class="toolbar-button__label">Flip</span>
-            <span class="toolbar-button__hint" aria-hidden="true">Space</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="toggle-shuffle" title="Shuffle order">
-            <span class="toolbar-button__icon" aria-hidden="true">⇋</span>
-            <span class="toolbar-button__label">Shuffle</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="random" title="Random card (R)">
-            <span class="toolbar-button__icon" aria-hidden="true">🎲</span>
-            <span class="toolbar-button__label">Random</span>
-            <span class="toolbar-button__hint" aria-hidden="true">R</span>
-          </button>
-        </div>
-        <div class="toolbar-group" role="group" aria-label="Progress">
-          <button type="button" class="toolbar-button toolbar-button--primary" data-action="mark-known" title="Mark card as known (K)">
-            <span class="toolbar-button__icon" aria-hidden="true">✓</span>
-            <span class="toolbar-button__label">Known</span>
-            <span class="toolbar-button__hint" aria-hidden="true">K</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
-            <span class="toolbar-button__icon" aria-hidden="true">↺</span>
-            <span class="toolbar-button__label">Reset</span>
-          </button>
-        </div>
-        <div class="toolbar-group toolbar-group--end" role="group" aria-label="Utilities">
-          <button
-            type="button"
-            class="toolbar-button"
-            data-action="toggle-help"
-            aria-haspopup="dialog"
-            aria-expanded="false"
-            title="Keyboard shortcuts (?)"
-          >
-            <span class="toolbar-button__icon" aria-hidden="true">?</span>
-            <span class="toolbar-button__label">Shortcuts</span>
-            <span class="toolbar-button__hint" aria-hidden="true">?</span>
-          </button>
-          <button type="button" class="toolbar-button" data-action="toggle-fullscreen" title="Enter fullscreen">
-            <span class="toolbar-button__icon" aria-hidden="true">⛶</span>
-            <span class="toolbar-button__label">Fullscreen</span>
-          </button>
-        </div>
+        <nav class="study-toolbar" aria-label="Card controls">
+          <div class="study-toolbar__inner">
+            <div class="toolbar-group" role="group" aria-label="Navigate cards">
+              <button type="button" class="toolbar-button" data-action="prev" title="Previous card (←)">
+                <span class="toolbar-button__icon" aria-hidden="true">⟵</span>
+                <span class="toolbar-button__label">Prev</span>
+                <span class="toolbar-button__hint" aria-hidden="true">←</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="next" title="Next card (→)">
+                <span class="toolbar-button__icon" aria-hidden="true">⟶</span>
+                <span class="toolbar-button__label">Next</span>
+                <span class="toolbar-button__hint" aria-hidden="true">→</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="flip" title="Flip card (Space / F)">
+                <span class="toolbar-button__icon" aria-hidden="true">⤾</span>
+                <span class="toolbar-button__label">Flip</span>
+                <span class="toolbar-button__hint" aria-hidden="true">Space</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="toggle-shuffle" title="Shuffle order">
+                <span class="toolbar-button__icon" aria-hidden="true">⇋</span>
+                <span class="toolbar-button__label">Shuffle</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="random" title="Random card (R)">
+                <span class="toolbar-button__icon" aria-hidden="true">🎲</span>
+                <span class="toolbar-button__label">Random</span>
+                <span class="toolbar-button__hint" aria-hidden="true">R</span>
+              </button>
+            </div>
+            <div class="toolbar-group" role="group" aria-label="Progress">
+              <button type="button" class="toolbar-button toolbar-button--primary" data-action="mark-known" title="Mark card as known (K)">
+                <span class="toolbar-button__icon" aria-hidden="true">✓</span>
+                <span class="toolbar-button__label">Known</span>
+                <span class="toolbar-button__hint" aria-hidden="true">K</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
+                <span class="toolbar-button__icon" aria-hidden="true">↺</span>
+                <span class="toolbar-button__label">Reset</span>
+              </button>
+            </div>
+            <div class="toolbar-group toolbar-group--end" role="group" aria-label="Utilities">
+              <button
+                type="button"
+                class="toolbar-button"
+                data-action="toggle-help"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                title="Keyboard shortcuts (?)"
+              >
+                <span class="toolbar-button__icon" aria-hidden="true">?</span>
+                <span class="toolbar-button__label">Shortcuts</span>
+                <span class="toolbar-button__hint" aria-hidden="true">?</span>
+              </button>
+              <button type="button" class="toolbar-button" data-action="toggle-fullscreen" title="Enter fullscreen">
+                <span class="toolbar-button__icon" aria-hidden="true">⛶</span>
+                <span class="toolbar-button__label">Fullscreen</span>
+              </button>
+            </div>
+          </div>
+        </nav>
       </div>
-      </nav>
-    </div>
 
     <div class="viewer__content">
       <div class="study-body">
@@ -109,7 +109,7 @@
           </span>
         </div>
 
-        <div class="card-stage-wrapper">
+        <div class="viewer__stage">
           <div class="card-stage" data-role="card-stage">
             {% if deck.cards %}
               <div class="empty-state" data-role="empty-state" hidden>
