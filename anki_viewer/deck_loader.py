@@ -2,19 +2,14 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List
 from zipfile import ZipFile
 
 _FIELD_SEPARATOR = "\x1f"
-_CLOZE_PATTERN = re.compile(
-    r"{{c(?P<index>\d+)::(?P<text>.*?)(::(?P<hint>.*?))?}}",
-    re.DOTALL | re.IGNORECASE,
-)
 
 
 class DeckLoadError(RuntimeError):
@@ -61,10 +56,41 @@ def load_collection(package_path: Path) -> DeckCollection:
     if not package_path.exists():
         raise DeckLoadError(f"Package not found: {package_path}")
 
-    with tempfile.TemporaryDirectory(prefix="anki_viewer_") as tmp_dir:
+    # Extract the package into a temporary directory. To avoid locking the
+    # extracted SQLite file during cleanup on Windows, copy the collection
+    # database out to a separate temporary file and open that copy instead.
+    tmp_dir = tempfile.mkdtemp(prefix="anki_viewer_")
+    try:
         _extract_package(package_path, tmp_dir)
         collection_path = _find_collection_file(Path(tmp_dir))
-        return _load_from_sqlite(collection_path)
+
+        # Copy the collection DB to a separate temp file outside the
+        # extracted directory so we can safely close and remove the
+        # extracted directory without the file being locked by SQLite.
+        copy_path = Path(tempfile.mktemp(prefix="anki_viewer_collection_"))
+        try:
+            import shutil
+
+            shutil.copy2(collection_path, copy_path)
+            collection = _load_from_sqlite(copy_path)
+        finally:
+            try:
+                Path(copy_path).unlink()
+            except Exception:
+                # Best effort cleanup of the copied DB; ignore errors.
+                pass
+
+        return collection
+    finally:
+        # Best-effort cleanup of the extracted package directory. On
+        # Windows it's possible for other processes (indexers, AV) to hold
+        # short-lived locks; ignore cleanup errors here.
+        try:
+            import shutil
+
+            shutil.rmtree(tmp_dir)
+        except Exception:
+            pass
 
 
 def _extract_package(package_path: Path, destination: str) -> None:
@@ -85,14 +111,16 @@ def _find_collection_file(extracted_path: Path) -> Path:
 
 def _load_from_sqlite(collection_path: Path) -> DeckCollection:
     try:
-        conn = sqlite3.connect(str(collection_path))
-        conn.row_factory = sqlite3.Row
+        # Use the connection as a context manager so it is closed when we're
+        # done reading. Also convert the cards generator to a list while the
+        # connection is still open to avoid holding the DB file open after
+        # the temporary directory is removed.
+        with sqlite3.connect(str(collection_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            deck_names = _read_deck_names(conn)
+            cards = _read_cards(conn, deck_names)
     except sqlite3.Error as exc:  # pragma: no cover - defensive programming
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
-
-    with conn:
-        deck_names = _read_deck_names(conn)
-        cards = _read_cards(conn, deck_names)
 
     decks: Dict[int, Deck] = {}
     for card in cards:
@@ -118,7 +146,12 @@ def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
     return {int(deck_id): data.get("name", str(deck_id)) for deck_id, data in decks_json.items()}
 
 
-def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> Iterable[Card]:
+def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> List[Card]:
+    """Read all cards from the collection and return a list of Card objects.
+
+    This fetches all rows while the DB connection is open so no cursor or
+    generator keeps the database file locked after the connection is closed.
+    """
     query = """
         SELECT
             cards.id AS card_id,
@@ -130,89 +163,28 @@ def _read_cards(conn: sqlite3.Connection, deck_names: Dict[int, str]) -> Iterabl
         JOIN notes ON notes.id = cards.nid
         ORDER BY cards.did, cards.due, cards.id
     """
-    for row in conn.execute(query):
+    rows = conn.execute(query).fetchall()
+    cards: List[Card] = []
+    for row in rows:
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
-        question, answer, extra = _format_card_fields(fields)
+        question = fields[0] if fields else ""
+        answer = fields[1] if len(fields) > 1 else ""
+        extra = fields[2:] if len(fields) > 2 else []
         deck_id = int(row["deck_id"])
         deck_name = deck_names.get(deck_id, str(deck_id))
-        yield Card(
-            card_id=int(row["card_id"]),
-            note_id=int(row["note_id"]),
-            deck_id=deck_id,
-            deck_name=deck_name,
-            template_ordinal=int(row["template_ordinal"]),
-            question=question,
-            answer=answer,
-            extra_fields=extra,
-        )
-
-
-def _format_card_fields(fields: List[str]) -> Tuple[str, str, List[str]]:
-    if not fields:
-        return "", "", []
-
-    base_question = fields[0]
-    base_answer = fields[1] if len(fields) > 1 else ""
-    extras = fields[2:] if len(fields) > 2 else []
-
-    question_is_cloze = _CLOZE_PATTERN.search(base_question) is not None
-
-    if question_is_cloze:
-        question_html = _render_cloze(base_question, reveal=False)
-        answer_sections = [_render_cloze(base_question, reveal=True)]
-        if base_answer:
-            answer_sections.append(
-                f"<div class=\"cloze-extra\">{_render_field(base_answer, reveal_cloze=True)}</div>"
+        cards.append(
+            Card(
+                card_id=int(row["card_id"]),
+                note_id=int(row["note_id"]),
+                deck_id=deck_id,
+                deck_name=deck_name,
+                template_ordinal=int(row["template_ordinal"]),
+                question=question,
+                answer=answer,
+                extra_fields=extra,
             )
-        answer_html = "".join(answer_sections)
-    else:
-        question_html = _render_field(base_question, reveal_cloze=False)
-        answer_html = _render_field(base_answer, reveal_cloze=True)
-
-    extras_html = [_render_field(value, reveal_cloze=True) for value in extras]
-    return question_html, answer_html, extras_html
-
-
-def _render_cloze(text: str, *, reveal: bool) -> str:
-    def replace(match: re.Match) -> str:
-        index = match.group("index")
-        content = match.group("text") or ""
-        hint = match.group("hint")
-
-        hint_html = f" <span class=\"cloze-hint\">({hint})</span>" if hint else ""
-
-        if reveal:
-            return (
-                f"<span class=\"cloze cloze-revealed\" data-cloze=\"{index}\">"
-                f"<span class=\"cloze-index\">{index}</span> {content}{hint_html}"
-                "</span>"
-            )
-
-        return (
-            f"<span class=\"cloze cloze-hidden\" data-cloze=\"{index}\">"
-            f"<span class=\"cloze-placeholder\">…</span>{hint_html}"
-            "</span>"
         )
-
-    rendered = _CLOZE_PATTERN.sub(replace, text)
-    return _normalize_field_html(rendered)
-
-
-def _render_field(text: str, *, reveal_cloze: bool) -> str:
-    if not text:
-        return ""
-
-    if _CLOZE_PATTERN.search(text):
-        return _render_cloze(text, reveal=reveal_cloze)
-
-    return _normalize_field_html(text)
-
-
-def _normalize_field_html(text: str) -> str:
-    if not text:
-        return ""
-    cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
-    return cleaned.replace("\n", "<br>\n")
+    return cards
 
 
 __all__ = [
