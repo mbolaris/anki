@@ -291,61 +291,47 @@ body {
 }
 
 .cloze {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 0.5rem;
   font-weight: 600;
-  line-height: 1.2;
-}
-
-.cloze-placeholder {
-  display: inline-block;
-  min-width: 1.2rem;
-  text-align: center;
-  letter-spacing: 0.3em;
+  position: relative;
+  padding: 0 0.1em;
 }
 
 .cloze-hidden {
-  background-color: rgba(37, 99, 235, 0.18);
-  color: var(--muted);
+  color: var(--accent);
+  border-bottom: 2px solid rgba(37, 99, 235, 0.35);
 }
 
-.cloze-hidden::before {
-  content: attr(data-cloze);
-  font-size: 0.75rem;
-  color: var(--fg);
-  opacity: 0.65;
-  margin-right: 0.25rem;
-}
-
-.cloze-revealed {
-  background-color: rgba(16, 185, 129, 0.18);
+.cloze-hidden .cloze-hint {
+  font-style: italic;
   color: inherit;
 }
 
-.cloze-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 999px;
-  background-color: rgba(37, 99, 235, 0.5);
-  color: white;
-  font-size: 0.75rem;
+.cloze-hidden .cloze-hint::before {
+  content: "[";
 }
 
-.cloze-hint {
-  font-size: 0.85rem;
+.cloze-hidden .cloze-hint::after {
+  content: "]";
+}
+
+.cloze-revealed {
+  background: rgba(37, 99, 235, 0.12);
+  border-radius: 0.35rem;
+  color: inherit;
+  padding: 0.1rem 0.25rem;
+}
+
+.cloze-revealed .cloze-hint {
+  margin-left: 0.35rem;
+  font-size: 0.85em;
+  font-style: italic;
   color: var(--muted);
 }
 
-.cloze-extra {
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px dashed var(--card-border);
+.cloze-extra-answer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--card-border);
 }
 
 .extra-fields summary {
