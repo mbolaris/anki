@@ -9,9 +9,12 @@ import sqlite3
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict, List
 from urllib.parse import unquote
 from zipfile import ZipFile
+
+from .card_types import detect_card_type
 
 _FIELD_SEPARATOR = "\x1f"
 _IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
@@ -34,6 +37,7 @@ class Card:
     template_ordinal: int
     question: str
     answer: str
+    card_type: str
     question_revealed: str | None = None
     extra_fields: List[str] = field(default_factory=list)
 
@@ -205,6 +209,17 @@ def _read_cards(
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
         question = _inline_media(fields[0], media_map) if fields else ""
         answer = _inline_media(fields[1], media_map) if len(fields) > 1 else ""
+        extra_values = fields[2:] if len(fields) > 2 else []
+        extra = [_inline_media(value, media_map) for value in extra_values]
+
+        card_preview = SimpleNamespace(
+            question=question,
+            answer=answer,
+            extra_fields=extra,
+            question_revealed=None,
+        )
+        card_type = detect_card_type(card_preview)
+
         question_revealed = None
         if "{{c" in question:
             rendered_question = _render_cloze(question, reveal=False)
@@ -213,8 +228,6 @@ def _read_cards(
             if answer.strip():
                 rendered_answer = f"{rendered_answer}<div class=\"cloze-extra-answer\">{answer}</div>"
             question, answer = rendered_question, rendered_answer
-        extra_values = fields[2:] if len(fields) > 2 else []
-        extra = [_inline_media(value, media_map) for value in extra_values]
         deck_id = int(row["deck_id"])
         deck_name = deck_names.get(deck_id, str(deck_id))
         cards.append(
@@ -226,6 +239,7 @@ def _read_cards(
                 template_ordinal=int(row["template_ordinal"]),
                 question=question,
                 answer=answer,
+                card_type=card_type,
                 extra_fields=extra,
                 question_revealed=question_revealed,
             )
