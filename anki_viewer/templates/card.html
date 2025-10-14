@@ -12,14 +12,14 @@
     {% if is_image %}data-has-images="true"{% endif %}
   >
     <header class="card-header">
-      <div class="card-header__line">
-        <span class="card-header__title">Card {{ display_number }}</span>
-        <span class="card-header__subtitle">Template {{ card.template_ordinal + 1 }}</span>
+      <div class="card-header__primary">
+        <span class="card-chip card-chip--primary">Card {{ display_number }}</span>
+        <span class="card-chip">Template {{ card.template_ordinal + 1 }}</span>
       </div>
       <div class="card-header__meta">
-        <span>Note {{ card.note_id }}</span>
-        <span>ID {{ card.card_id }}</span>
-        <span class="card-header__type">{{ card.card_type|title }}</span>
+        <span class="card-meta-item">Note {{ card.note_id }}</span>
+        <span class="card-meta-item">ID {{ card.card_id }}</span>
+        <span class="card-meta-item card-meta-item--type">{{ card.card_type|title }}</span>
       </div>
     </header>
     <div class="card-body">
