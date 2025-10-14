@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Deck not found · Anki Deck Viewer{% endblock %}
+{% block content %}
+  <section class="notice">
+    <h2>Deck not found</h2>
+    <p>The requested deck (ID {{ deck_id }}) does not exist in this package.</p>
+    <p><a class="back-link" href="{{ url_for('index') }}">Return to deck list</a></p>
+  </section>
+{% endblock %}
