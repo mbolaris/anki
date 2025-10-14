@@ -6,6 +6,12 @@ from typing import Optional
 
 from flask import Flask, render_template
 
+from .card_types import (
+    detect_card_type,
+    is_cloze_card,
+    is_image_card,
+    parse_cloze_deletions,
+)
 from .deck_loader import DeckCollection, DeckLoadError, load_collection
 
 
@@ -57,4 +63,10 @@ def create_app(apkg_path: Optional[Path] = None) -> Flask:
     return app
 
 
-__all__ = ["create_app"]
+__all__ = [
+    "create_app",
+    "detect_card_type",
+    "is_cloze_card",
+    "is_image_card",
+    "parse_cloze_deletions",
+]
