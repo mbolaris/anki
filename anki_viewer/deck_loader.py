@@ -105,6 +105,25 @@ class DeckCollection:
         return f"{base}/{stored}"
 
 
+@dataclass(frozen=True)
+class NoteModelTemplate:
+    """Description of how a note should be rendered for a specific template."""
+
+    name: str
+    question_format: str
+    answer_format: str
+
+
+@dataclass(frozen=True)
+class NoteModel:
+    """Representation of an Anki note model including its fields and templates."""
+
+    model_id: int
+    name: str
+    fields: List[str]
+    templates: List[NoteModelTemplate]
+
+
 def load_collection(
     package_path: Path,
     *,
@@ -255,6 +274,9 @@ def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:
             if not stored_name:
                 continue
             media_map[filename] = stored_name
+            stem = Path(filename).stem
+            if stem and stem != filename and stem not in media_map:
+                media_map[stem] = stored_name
         except OSError:
             continue
     return media_map
@@ -292,7 +314,8 @@ def _load_from_sqlite(
         with sqlite3.connect(str(collection_path)) as conn:
             conn.row_factory = sqlite3.Row
             deck_names = _read_deck_names(conn)
-            cards = _read_cards(conn, deck_names, media_map, media_url_path)
+            models = _read_models(conn)
+            cards = _read_cards(conn, deck_names, models, media_map, media_url_path)
     except sqlite3.Error as exc:  # pragma: no cover - defensive programming
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
 
@@ -341,9 +364,53 @@ def _read_deck_names(conn: sqlite3.Connection) -> Dict[int, str]:
     return {int(deck_id): data.get("name", str(deck_id)) for deck_id, data in decks_json.items()}
 
 
+def _read_models(conn: sqlite3.Connection) -> Dict[int, NoteModel]:
+    """Return a mapping of model identifiers to their definitions."""
+
+    cursor = conn.execute("SELECT models FROM col LIMIT 1")
+    row = cursor.fetchone()
+    if row is None:
+        raise DeckLoadError("The collection database is missing model metadata")
+
+    try:
+        models_json = json.loads(row["models"])
+    except (json.JSONDecodeError, KeyError) as exc:
+        raise DeckLoadError("Could not parse model metadata") from exc
+
+    models: Dict[int, NoteModel] = {}
+    for model_id_str, data in models_json.items():
+        try:
+            model_id = int(model_id_str)
+        except (TypeError, ValueError):
+            continue
+
+        field_names = [
+            field.get("name", f"Field {index + 1}")
+            for index, field in enumerate(data.get("flds", []))
+        ]
+        templates: List[NoteModelTemplate] = []
+        for index, template in enumerate(data.get("tmpls", [])):
+            templates.append(
+                NoteModelTemplate(
+                    name=template.get("name", f"Template {index + 1}"),
+                    question_format=template.get("qfmt", ""),
+                    answer_format=template.get("afmt", ""),
+                )
+            )
+
+        models[model_id] = NoteModel(
+            model_id=model_id,
+            name=data.get("name", str(model_id)),
+            fields=field_names,
+            templates=templates,
+        )
+    return models
+
+
 def _read_cards(
     conn: sqlite3.Connection,
     deck_names: Dict[int, str],
+    models: Dict[int, NoteModel],
     media_map: Dict[str, str],
     media_url_path: str,
 ) -> List[Card]:
@@ -376,6 +443,7 @@ def _read_cards(
             cards.nid AS note_id,
             cards.did AS deck_id,
             cards.ord AS template_ordinal,
+            notes.mid AS model_id,
             notes.flds AS note_fields
         FROM cards
         JOIN notes ON notes.id = cards.nid
@@ -385,8 +453,24 @@ def _read_cards(
     cards: List[Card] = []
     for row in rows:
         fields = row["note_fields"].split(_FIELD_SEPARATOR)
-        question = _inline_media(fields[0], media_map, media_url_path) if fields else ""
-        answer = _inline_media(fields[1], media_map, media_url_path) if len(fields) > 1 else ""
+        model_id = int(row["model_id"]) if row["model_id"] is not None else None
+        model = models.get(model_id) if model_id is not None else None
+
+        template_index = int(row["template_ordinal"])
+        field_map = _build_field_map(fields, model.fields if model else [])
+
+        if model and 0 <= template_index < len(model.templates):
+            template = model.templates[template_index]
+            question_source = _render_anki_template(template.question_format, field_map)
+            answer_context = dict(field_map)
+            answer_context.setdefault("FrontSide", question_source)
+            answer_source = _render_anki_template(template.answer_format, answer_context)
+        else:
+            question_source = fields[0] if fields else ""
+            answer_source = fields[1] if len(fields) > 1 else ""
+
+        question = _inline_media(question_source, media_map, media_url_path)
+        answer = _inline_media(answer_source, media_map, media_url_path)
         extra_values = fields[2:] if len(fields) > 2 else []
         extra = [_inline_media(value, media_map, media_url_path) for value in extra_values]
 
@@ -430,6 +514,134 @@ def _read_cards(
     return cards
 
 
+def _build_field_map(values: List[str], field_names: List[str]) -> Dict[str, str]:
+    """Return a mapping of template field names to the provided values."""
+
+    mapping: Dict[str, str] = {}
+    for index, value in enumerate(values):
+        if index < len(field_names):
+            mapping[field_names[index]] = value
+        mapping[f"Field{index + 1}"] = value
+    return mapping
+
+
+def _render_anki_template(template: str, fields: Dict[str, str]) -> str:
+    """Render a simplified Anki template using the provided *fields*."""
+
+    if not template:
+        return ""
+
+    def render_block(text: str, context: Dict[str, str]) -> str:
+        result: List[str] = []
+        index = 0
+        length = len(text)
+        while index < length:
+            start = text.find("{{", index)
+            if start == -1:
+                result.append(text[index:])
+                break
+            result.append(text[index:start])
+            end = text.find("}}", start + 2)
+            if end == -1:
+                result.append(text[start:])
+                break
+            token = text[start + 2 : end].strip()
+            index = end + 2
+            if not token:
+                continue
+
+            marker = token[0]
+            if marker in "#^":
+                key = token[1:].strip()
+                section_key = _normalize_template_key(key)
+                inner, index = _extract_section(text, section_key, index)
+                value = _resolve_template_value(key, context)
+                should_render = _is_truthy(value)
+                if marker == "^":
+                    should_render = not should_render
+                if should_render:
+                    result.append(render_block(inner, context))
+            elif marker == "/":
+                # Ignore stray closing tags; they are handled when the opening
+                # tag is processed.
+                continue
+            elif marker == "!":
+                # Template comments are discarded.
+                continue
+            else:
+                result.append(_resolve_template_value(token, context))
+        return "".join(result)
+
+    return render_block(template, dict(fields))
+
+
+def _extract_section(template: str, name: str, start: int) -> tuple[str, int]:
+    """Return the inner content and end index for a section."""
+
+    depth = 1
+    index = start
+    while index < len(template):
+        open_index = template.find("{{", index)
+        if open_index == -1:
+            return template[start:], len(template)
+        close_index = template.find("}}", open_index + 2)
+        if close_index == -1:
+            return template[start:], len(template)
+        token = template[open_index + 2 : close_index].strip()
+        index = close_index + 2
+        if not token:
+            continue
+
+        marker = token[0]
+        if marker in "#^":
+            nested_name = _normalize_template_key(token[1:])
+            if nested_name == name:
+                depth += 1
+                continue
+        elif marker == "/":
+            if _normalize_template_key(token[1:]) == name:
+                return template[start:open_index], index
+    return template[start:], len(template)
+
+
+def _normalize_template_key(raw: str) -> str:
+    """Return the canonical field name for a template token."""
+
+    key = raw.strip()
+    if not key:
+        return ""
+    parts = [part.strip() for part in key.split(":") if part.strip()]
+    if not parts:
+        return key
+    return parts[-1]
+
+
+def _resolve_template_value(token: str, context: Dict[str, str]) -> str:
+    """Resolve the value for a template token from *context*."""
+
+    key = token.strip()
+    if not key:
+        return ""
+    if key in context:
+        return context[key]
+    normalized = _normalize_template_key(key)
+    if normalized and normalized in context:
+        return context[normalized]
+    return ""
+
+
+def _is_truthy(value: object) -> bool:
+    """Return truthiness compatible with Anki section rendering."""
+
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, dict, set)):
+        return bool(value)
+    return bool(value)
+
+
 def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> str:
     """Replace media references in *html* with served URLs.
 
@@ -461,6 +673,10 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
         filename = Path(normalized).name
         data_uri = media_map.get(filename)
         if not data_uri:
+            stem = Path(filename).stem
+            if stem and stem in media_map:
+                data_uri = media_map[stem]
+        if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)
         return f"{prefix}{quote}{url}{quote}"
@@ -472,6 +688,10 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
         normalized = unquote(src)
         filename = Path(normalized).name
         data_uri = media_map.get(filename)
+        if not data_uri:
+            stem = Path(filename).stem
+            if stem and stem in media_map:
+                data_uri = media_map[stem]
         if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)

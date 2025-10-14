@@ -15,9 +15,44 @@ from anki_viewer import deck_loader
 def _create_sqlite_collection(db_path: Path) -> None:
     conn = sqlite3.connect(db_path)
     try:
-        conn.execute("CREATE TABLE col (decks TEXT)")
-        conn.execute("INSERT INTO col VALUES (?)", (json.dumps({"1": {"name": "Deck"}}),))
-        conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, flds TEXT)")
+        conn.execute("CREATE TABLE col (decks TEXT, models TEXT)")
+        models = {
+            "1": {
+                "name": "Basic",
+                "flds": [
+                    {"name": "Front"},
+                    {"name": "Back"},
+                    {"name": "Extra"},
+                ],
+                "tmpls": [
+                    {
+                        "name": "Card 1",
+                        "qfmt": "<div>{{Front}}</div>",
+                        "afmt": "{{FrontSide}}<hr id=answer>{{Back}}",
+                    }
+                ],
+            },
+            "2": {
+                "name": "Cloze",
+                "flds": [
+                    {"name": "Text"},
+                    {"name": "Back Extra"},
+                    {"name": "Extra"},
+                ],
+                "tmpls": [
+                    {
+                        "name": "Cloze",
+                        "qfmt": "{{cloze:Text}}",
+                        "afmt": "{{cloze:Text}}<br>{{Back Extra}}",
+                    }
+                ],
+            },
+        }
+        conn.execute(
+            "INSERT INTO col (decks, models) VALUES (?, ?)",
+            (json.dumps({"1": {"name": "Deck"}}), json.dumps(models)),
+        )
+        conn.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, flds TEXT, mid INTEGER)")
         fields_basic = deck_loader._FIELD_SEPARATOR.join([
             "What is 2 + 2?",
             "4",
@@ -28,13 +63,13 @@ def _create_sqlite_collection(db_path: Path) -> None:
             "Answer",
             "Extra",
         ])
-        conn.execute("INSERT INTO notes VALUES (1, ?)", (fields_basic,))
-        conn.execute("INSERT INTO notes VALUES (2, ?)", (fields_cloze,))
+        conn.execute("INSERT INTO notes (id, flds, mid) VALUES (1, ?, 1)", (fields_basic,))
+        conn.execute("INSERT INTO notes (id, flds, mid) VALUES (2, ?, 2)", (fields_cloze,))
         conn.execute(
             "CREATE TABLE cards (id INTEGER PRIMARY KEY, nid INTEGER, did INTEGER, ord INTEGER, due INTEGER)"
         )
         conn.execute("INSERT INTO cards VALUES (1, 1, 1, 0, 0)")
-        conn.execute("INSERT INTO cards VALUES (2, 2, 1, 1, 1)")
+        conn.execute("INSERT INTO cards VALUES (2, 2, 1, 0, 1)")
         conn.commit()
     finally:
         conn.close()
@@ -73,10 +108,11 @@ def test_store_media_file_copies_source(tmp_media_dir: Path, tmp_path: Path) -> 
 
 
 def test_inline_media_rewrites_sources() -> None:
-    html = '<img src="diagram.png"><img src="/other.png">'
-    media_map = {"diagram.png": "diagram.png"}
+    html = '<img src="diagram.png"><img src="diagram"><img src="/other.png">'
+    media_map = {"diagram.png": "diagram.png", "diagram": "diagram.png"}
     result = deck_loader._inline_media(html, media_map, "/media")
     assert result.startswith('<img src="/media/diagram.png"')
+    assert '<img src="/media/diagram.png"' in result
     assert "/other.png" in result
 
 
@@ -87,7 +123,8 @@ def test_read_media_copies_manifest(tmp_path: Path, tmp_media_dir: Path) -> None
     (extracted / "0").write_text("img")
     media_json.write_text(json.dumps({"0": "diagram.png"}))
     manifest = deck_loader._read_media(extracted, tmp_media_dir)
-    assert manifest == {"diagram.png": "diagram.png"}
+    assert manifest["diagram.png"] == "diagram.png"
+    assert manifest["diagram"] == "diagram.png"
     assert (tmp_media_dir / "diagram.png").exists()
 
 
@@ -96,6 +133,14 @@ def test_render_cloze_outputs_placeholder() -> None:
     assert "cloze-hidden" in html
     revealed = deck_loader._render_cloze("{{c1::Heart}}", reveal=True)
     assert "Heart" in revealed
+
+
+def test_render_anki_template_supports_sections() -> None:
+    template = "{{#Image}}<div>{{Image}}</div>{{/Image}}{{^Footer}}<span>No footer</span>{{/Footer}}"
+    fields = {"Image": "<img src=\"diagram.png\">", "Footer": ""}
+    rendered = deck_loader._render_anki_template(template, fields)
+    assert "<div><img src=\"diagram.png\"></div>" in rendered
+    assert "No footer" in rendered
 
 
 def test_build_media_url_handles_trailing_slashes() -> None:
@@ -108,9 +153,13 @@ def test_load_from_sqlite_parses_cards(tmp_path: Path, tmp_media_dir: Path) -> N
 
     media_map = {"diagram.png": "diagram.png"}
     collection = deck_loader._load_from_sqlite(db_path, media_map, "/media")
-    assert collection.decks[1].cards[0].card_type == "basic"
-    assert collection.decks[1].cards[1].card_type == "cloze"
-    assert collection.decks[1].cards[1].cloze_deletions == [{"num": 1, "content": "Heart"}]
+    basic_card = collection.decks[1].cards[0]
+    cloze_card = collection.decks[1].cards[1]
+    assert basic_card.card_type == "basic"
+    assert "<div>What is 2 + 2?</div>" in basic_card.question
+    assert "<hr id=answer>" in basic_card.answer
+    assert cloze_card.card_type == "cloze"
+    assert cloze_card.cloze_deletions == [{"num": 1, "content": "Heart"}]
 
 
 def test_load_collection_raises_for_missing_package(tmp_path: Path) -> None:
