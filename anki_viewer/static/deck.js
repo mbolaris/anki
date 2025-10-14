@@ -106,7 +106,6 @@
     const helpOverlay = document.querySelector('[data-role="shortcut-overlay"]');
     const cardTypeIndicator = viewer.querySelector('[data-role="card-type"]');
     const cardStage = viewer.querySelector('[data-role="card-stage"]');
-    const densityToggleButton = viewer.querySelector('[data-action="toggle-density"]');
     const fullscreenToggleButton = viewer.querySelector('[data-action="toggle-fullscreen"]');
     const shuffleToggleButton = viewer.querySelector('[data-action="toggle-shuffle"]');
 
@@ -116,11 +115,9 @@
 
     const viewedKey = `deck-${deckId}-viewed`;
     const knownKey = `deck-${deckId}-known`;
-    const densityKey = `deck-${deckId}-density`;
 
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
-    const savedDensity = readFromStorage(densityKey);
 
     function getOrCreateClozeState(card) {
       if (!card || card.dataset.cardType !== "cloze") {
@@ -551,7 +548,6 @@
         if (
           action === "toggle-help" ||
           action === "close-help" ||
-          action === "toggle-density" ||
           action === "toggle-fullscreen"
         ) {
           button.disabled = false;
@@ -567,31 +563,6 @@
         }
         button.disabled = !hasCards;
       });
-    }
-
-    function updateDensityButton(mode) {
-      if (!densityToggleButton) {
-        return;
-      }
-      const isCompact = mode !== "comfortable";
-      densityToggleButton.setAttribute("aria-pressed", isCompact ? "true" : "false");
-      densityToggleButton.setAttribute(
-        "title",
-        isCompact ? "Switch to comfortable spacing" : "Switch to compact spacing"
-      );
-      const label = densityToggleButton.querySelector(".toolbar-button__label");
-      if (label) {
-        label.textContent = isCompact ? "Compact" : "Comfort";
-      }
-    }
-
-    function setDensity(mode, { persist = true } = {}) {
-      const normalized = mode === "comfortable" ? "comfortable" : "compact";
-      viewer.dataset.density = normalized;
-      updateDensityButton(normalized);
-      if (persist) {
-        writeToStorage(densityKey, normalized);
-      }
     }
 
     function updateShuffleButton() {
@@ -691,11 +662,6 @@
           });
         }
       }
-    }
-
-    function toggleDensity() {
-      const nextMode = viewer.dataset.density === "compact" ? "comfortable" : "compact";
-      setDensity(nextMode);
     }
 
     function showEmptyStateIfNeeded() {
@@ -880,9 +846,6 @@
         case "reset-progress":
           resetProgress();
           break;
-        case "toggle-density":
-          toggleDensity();
-          break;
         case "toggle-fullscreen":
           toggleFullscreenMode();
           break;
@@ -1005,8 +968,6 @@
       syncFullscreenFromDocument();
     });
 
-    const initialDensity = savedDensity === "comfortable" ? "comfortable" : "compact";
-    setDensity(initialDensity, { persist: false });
     updateShuffleButton();
     rebuildActiveCardIds();
     syncFullscreenFromDocument();

@@ -87,6 +87,20 @@ a {
   margin: 0 auto;
 }
 
+.viewer {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: clamp(1rem, 3vw, 2rem);
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  gap: clamp(1rem, 3vw, 1.5rem);
+  background: none;
+  align-items: stretch;
+  justify-items: center;
+}
+
 .deck-list ul {
   list-style: none;
   padding: 0;
@@ -134,27 +148,37 @@ a {
 }
 
 .card-viewer {
-  --study-header-height: 56px;
-  --study-toolbar-height: 44px;
+  --study-header-height: 3rem;
+  --study-toolbar-height: 3rem;
   --card-padding: clamp(1.4rem, 3vw, 1.9rem);
   --card-gap: clamp(1rem, 2vw, 1.35rem);
-  margin: clamp(1.5rem, 4vw, 3rem) auto;
-  max-width: min(1100px, 96vw);
+  width: min(1100px, 100%);
+  height: 100%;
   background: var(--surface);
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 1.5rem;
   box-shadow: var(--shadow-soft);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  margin: 0 auto;
+  max-width: 100%;
   overflow: hidden;
   backdrop-filter: blur(12px);
 }
 
-.card-viewer[data-density="comfortable"] {
-  --study-header-height: 64px;
-  --study-toolbar-height: 52px;
-  --card-padding: clamp(1.75rem, 4vw, 2.35rem);
-  --card-gap: clamp(1.35rem, 3vw, 1.75rem);
+.viewer__chrome {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.viewer__content {
+  min-height: 0;
+  overflow: auto;
+  height: 100%;
 }
 
 .card-viewer[data-mode="fullscreen"] {
@@ -413,14 +437,13 @@ a {
 }
 
 .study-body {
-  padding: clamp(1.2rem, 3vw, 1.8rem) clamp(1.2rem, 3vw, 2rem) clamp(2rem, 4vw, 2.75rem);
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.card-viewer[data-density="comfortable"] .study-body {
-  padding: clamp(1.5rem, 4vw, 2.35rem) clamp(1.5rem, 4vw, 2.75rem) clamp(2.35rem, 5vw, 3.1rem);
+  min-height: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: clamp(1rem, 2vw, 1.6rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
+  box-sizing: border-box;
 }
 
 .study-status {
@@ -450,12 +473,21 @@ a {
   background: rgba(99, 102, 241, 0.08);
 }
 
+.card-stage-wrapper {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  overflow: auto;
+}
+
 .card-stage {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: clamp(320px, 60vh, 540px);
-  padding: clamp(0.5rem, 2vw, 1.5rem);
+  width: 100%;
+  margin: 0 auto;
 }
 
 .card-stage .empty-state {

@@ -15,7 +15,7 @@
         </p>
       {% endif %}
     </header>
-    <main class="content">
+    <main class="{% block main_class %}content{% endblock %}">
       {% block content %}{% endblock %}
     </main>
     <footer class="site-footer">

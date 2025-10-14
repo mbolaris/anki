@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 {% import "card.html" as card_templates %}
 {% block title %}{{ deck.name }} · Anki Deck Viewer{% endblock %}
+{% block main_class %}viewer{% endblock %}
 {% block content %}
   <section
     class="card-viewer"
     data-deck-id="{{ deck.deck_id }}"
     data-total-cards="{{ deck.cards|length }}"
     data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
-    data-density="compact"
   >
-    <header class="study-header">
+    <div class="viewer__chrome">
+      <header class="study-header">
       <div class="study-header__inner">
         <a class="study-header__crumb" href="{{ url_for('index') }}" aria-label="Back to deck list">
           ← Decks
@@ -36,9 +37,9 @@
           <div class="progress-bar__inner"></div>
         </div>
       </div>
-    </header>
+      </header>
 
-    <nav class="study-toolbar" aria-label="Card controls">
+      <nav class="study-toolbar" aria-label="Card controls">
       <div class="study-toolbar__inner">
         <div class="toolbar-group" role="group" aria-label="Navigate cards">
           <button type="button" class="toolbar-button" data-action="prev" title="Previous card (←)">
@@ -77,11 +78,7 @@
             <span class="toolbar-button__label">Reset</span>
           </button>
         </div>
-        <div class="toolbar-group toolbar-group--end" role="group" aria-label="Display options">
-          <button type="button" class="toolbar-button" data-action="toggle-density" aria-pressed="true" title="Toggle density">
-            <span class="toolbar-button__icon" aria-hidden="true">⇕</span>
-            <span class="toolbar-button__label">Compact</span>
-          </button>
+        <div class="toolbar-group toolbar-group--end" role="group" aria-label="Utilities">
           <button
             type="button"
             class="toolbar-button"
@@ -100,29 +97,34 @@
           </button>
         </div>
       </div>
-    </nav>
+      </nav>
+    </div>
 
-    <div class="study-body">
-      <div class="study-status">
-        <p class="known-counter" data-role="known-count">0 cards marked as known</p>
-        <span class="card-type-chip" data-role="card-type"{% if not deck.cards %} hidden{% endif %}>
-          {% if deck.cards %}{{ deck.cards[0].card_type|title }} card{% endif %}
-        </span>
-      </div>
+    <div class="viewer__content">
+      <div class="study-body">
+        <div class="study-status">
+          <p class="known-counter" data-role="known-count">0 cards marked as known</p>
+          <span class="card-type-chip" data-role="card-type"{% if not deck.cards %} hidden{% endif %}>
+            {% if deck.cards %}{{ deck.cards[0].card_type|title }} card{% endif %}
+          </span>
+        </div>
 
-      <div class="card-stage" data-role="card-stage">
-        {% if deck.cards %}
-          <div class="empty-state" data-role="empty-state" hidden>
-            All cards are marked as known. Reset progress to start over.
+        <div class="card-stage-wrapper">
+          <div class="card-stage" data-role="card-stage">
+            {% if deck.cards %}
+              <div class="empty-state" data-role="empty-state" hidden>
+                All cards are marked as known. Reset progress to start over.
+              </div>
+              {% set counter = namespace(value=0) %}
+              {% for card in deck.cards %}
+                {% set counter.value = counter.value + 1 %}
+                {{ card_templates.render_card(card, deck, counter.value) }}
+              {% endfor %}
+            {% else %}
+              <p class="empty-state">No cards were found in this deck.</p>
+            {% endif %}
           </div>
-          {% set counter = namespace(value=0) %}
-          {% for card in deck.cards %}
-            {% set counter.value = counter.value + 1 %}
-            {{ card_templates.render_card(card, deck, counter.value) }}
-          {% endfor %}
-        {% else %}
-          <p class="empty-state">No cards were found in this deck.</p>
-        {% endif %}
+        </div>
       </div>
     </div>
   </section>
