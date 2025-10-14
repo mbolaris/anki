@@ -60,6 +60,15 @@
     writeToStorage(key, value);
   }
 
+  function shuffleArray(values) {
+    const copy = Array.isArray(values) ? [...values] : [];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     const viewer = document.querySelector(".card-viewer");
     if (!viewer) {
@@ -82,6 +91,9 @@
     });
 
     const cardById = new Map(cardElements.map((card) => [card.dataset.cardId, card]));
+    const baseOrder = cardElements
+      .map((card) => card.dataset.cardId)
+      .filter((cardId) => typeof cardId === "string" && cardId.length > 0);
     const counterEl = viewer.querySelector('[data-role="counter"]');
     const counterCurrent = counterEl ? counterEl.querySelector('[data-role="counter-current"]') : null;
     const counterTotal = counterEl ? counterEl.querySelector('[data-role="counter-total"]') : null;
@@ -94,6 +106,9 @@
     const helpOverlay = document.querySelector('[data-role="shortcut-overlay"]');
     const cardTypeIndicator = viewer.querySelector('[data-role="card-type"]');
     const cardStage = viewer.querySelector('[data-role="card-stage"]');
+    const densityToggleButton = viewer.querySelector('[data-action="toggle-density"]');
+    const fullscreenToggleButton = viewer.querySelector('[data-action="toggle-fullscreen"]');
+    const shuffleToggleButton = viewer.querySelector('[data-action="toggle-shuffle"]');
 
     if (counterTotal) {
       counterTotal.textContent = String(totalCards);
@@ -101,9 +116,11 @@
 
     const viewedKey = `deck-${deckId}-viewed`;
     const knownKey = `deck-${deckId}-known`;
+    const densityKey = `deck-${deckId}-density`;
 
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
+    const savedDensity = readFromStorage(densityKey);
 
     function getOrCreateClozeState(card) {
       if (!card || card.dataset.cardType !== "cloze") {
@@ -368,25 +385,20 @@
       }
     }
 
-    let activeCardIds = cardElements
-      .map((card) => card.dataset.cardId)
-      .filter((cardId) => {
-        const isKnown = knownSet.has(cardId);
-        const card = cardById.get(cardId);
-        if (card) {
-          card.classList.toggle("is-known", isKnown);
-        }
-        return !isKnown;
-      });
-
-    let currentIndex = activeCardIds.length > 0 ? 0 : -1;
+    let activeCardIds = [];
+    let currentIndex = -1;
+    let isShuffled = false;
 
     const keyToAction = new Map([
       [" ", "flip"],
+      ["f", "flip"],
+      ["F", "flip"],
       ["ArrowRight", "next"],
       ["ArrowLeft", "prev"],
       ["r", "random"],
       ["R", "random"],
+      ["k", "mark-known"],
+      ["K", "mark-known"],
     ]);
 
     function persistViewed() {
@@ -433,7 +445,8 @@
       }
 
       cardTypeIndicator.hidden = false;
-      cardTypeIndicator.textContent = type.toUpperCase();
+      const display = type.charAt(0).toUpperCase() + type.slice(1);
+      cardTypeIndicator.textContent = `${display} card`;
       cardTypeIndicator.setAttribute("data-card-type", type);
       viewer.dataset.activeCardType = type;
     }
@@ -523,26 +536,166 @@
       const percent = Math.round((viewedSet.size / totalCards) * 100);
       progressBarInner.style.width = `${percent}%`;
       progressBar.setAttribute("aria-valuenow", String(percent));
-      progressLabel.textContent = `${viewedSet.size} / ${totalCards} viewed (${percent}%)`;
+      progressLabel.textContent = `${viewedSet.size} / ${totalCards} viewed • ${percent}%`;
     }
 
     function updateControlsState() {
       const hasCards = activeCardIds.length > 0;
+      const hasMultiple = activeCardIds.length > 1;
       const buttons = viewer.querySelectorAll("[data-action]");
       buttons.forEach((button) => {
         const action = button.getAttribute("data-action");
-        if (!action || action === "toggle-help" || action === "close-help") {
+        if (!action) {
+          return;
+        }
+        if (
+          action === "toggle-help" ||
+          action === "close-help" ||
+          action === "toggle-density" ||
+          action === "toggle-fullscreen"
+        ) {
+          button.disabled = false;
           return;
         }
         if (action === "reset-progress") {
           button.disabled = cardElements.length === 0;
           return;
         }
+        if (action === "toggle-shuffle") {
+          button.disabled = !hasMultiple && !isShuffled;
+          return;
+        }
         button.disabled = !hasCards;
       });
-      if (helpToggleButton) {
-        helpToggleButton.disabled = false;
+    }
+
+    function updateDensityButton(mode) {
+      if (!densityToggleButton) {
+        return;
       }
+      const isCompact = mode !== "comfortable";
+      densityToggleButton.setAttribute("aria-pressed", isCompact ? "true" : "false");
+      densityToggleButton.setAttribute(
+        "title",
+        isCompact ? "Switch to comfortable spacing" : "Switch to compact spacing"
+      );
+      const label = densityToggleButton.querySelector(".toolbar-button__label");
+      if (label) {
+        label.textContent = isCompact ? "Compact" : "Comfort";
+      }
+    }
+
+    function setDensity(mode, { persist = true } = {}) {
+      const normalized = mode === "comfortable" ? "comfortable" : "compact";
+      viewer.dataset.density = normalized;
+      updateDensityButton(normalized);
+      if (persist) {
+        writeToStorage(densityKey, normalized);
+      }
+    }
+
+    function updateShuffleButton() {
+      if (!shuffleToggleButton) {
+        return;
+      }
+      shuffleToggleButton.setAttribute("aria-pressed", isShuffled ? "true" : "false");
+      shuffleToggleButton.setAttribute(
+        "title",
+        isShuffled ? "Restore original order" : "Shuffle order"
+      );
+      const label = shuffleToggleButton.querySelector(".toolbar-button__label");
+      if (label) {
+        label.textContent = isShuffled ? "Unshuffle" : "Shuffle";
+      }
+    }
+
+    function rebuildActiveCardIds(preserveCardId) {
+      const available = baseOrder.filter((cardId) => {
+        if (!cardId) {
+          return false;
+        }
+        const isKnown = knownSet.has(cardId);
+        const card = cardById.get(cardId);
+        if (card) {
+          card.classList.toggle("is-known", isKnown);
+          if (isKnown) {
+            card.classList.remove("revealed");
+            updateQuestionVisibility(card);
+          }
+        }
+        return !isKnown;
+      });
+
+      activeCardIds = isShuffled ? shuffleArray(available) : available;
+
+      if (preserveCardId && activeCardIds.includes(preserveCardId)) {
+        currentIndex = activeCardIds.indexOf(preserveCardId);
+      } else if (activeCardIds.length === 0) {
+        currentIndex = -1;
+      } else {
+        if (currentIndex < 0 || currentIndex >= activeCardIds.length) {
+          currentIndex = 0;
+        }
+      }
+    }
+
+    function setShuffleState(shuffled, preserveCardId) {
+      isShuffled = Boolean(shuffled);
+      updateShuffleButton();
+      rebuildActiveCardIds(preserveCardId);
+      showCardByIndex(currentIndex);
+    }
+
+    function toggleShuffle() {
+      const activeCard = getActiveCardElement();
+      const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
+      setShuffleState(!isShuffled, preserveCardId);
+    }
+
+    function updateFullscreenButton(active) {
+      if (!fullscreenToggleButton) {
+        return;
+      }
+      fullscreenToggleButton.setAttribute("aria-pressed", active ? "true" : "false");
+      fullscreenToggleButton.setAttribute(
+        "title",
+        active ? "Exit fullscreen (Esc)" : "Enter fullscreen"
+      );
+      const label = fullscreenToggleButton.querySelector(".toolbar-button__label");
+      if (label) {
+        label.textContent = active ? "Exit" : "Fullscreen";
+      }
+    }
+
+    function syncFullscreenFromDocument() {
+      const element = document.fullscreenElement;
+      const active = Boolean(element) && element.contains(viewer);
+      if (active) {
+        viewer.dataset.mode = "fullscreen";
+      } else {
+        delete viewer.dataset.mode;
+      }
+      updateFullscreenButton(active);
+    }
+
+    function toggleFullscreenMode() {
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } else {
+        const target = document.documentElement;
+        if (target && target.requestFullscreen) {
+          target.requestFullscreen().catch(() => {
+            syncFullscreenFromDocument();
+          });
+        }
+      }
+    }
+
+    function toggleDensity() {
+      const nextMode = viewer.dataset.density === "compact" ? "comfortable" : "compact";
+      setDensity(nextMode);
     }
 
     function showEmptyStateIfNeeded() {
@@ -637,14 +790,16 @@
       knownSet.clear();
       removeFromStorage(viewedKey);
       removeFromStorage(knownKey);
-      activeCardIds = cardElements.map((card) => {
+      cardElements.forEach((card) => {
         card.classList.remove("is-known", "revealed");
         updateQuestionVisibility(card);
         resetClozeForCard(card);
-        return card.dataset.cardId;
       });
       updateProgress();
       updateKnownCount();
+      isShuffled = false;
+      updateShuffleButton();
+      rebuildActiveCardIds();
       showCardByIndex(0);
     }
 
@@ -716,11 +871,20 @@
         case "random":
           goToRandom();
           break;
+        case "toggle-shuffle":
+          toggleShuffle();
+          break;
         case "mark-known":
           markCurrentCardKnown();
           break;
         case "reset-progress":
           resetProgress();
+          break;
+        case "toggle-density":
+          toggleDensity();
+          break;
+        case "toggle-fullscreen":
+          toggleFullscreenMode();
           break;
         case "toggle-help":
           toggleHelp();
@@ -836,6 +1000,16 @@
       performAction(action);
       flashControl(action);
     });
+
+    document.addEventListener("fullscreenchange", () => {
+      syncFullscreenFromDocument();
+    });
+
+    const initialDensity = savedDensity === "comfortable" ? "comfortable" : "compact";
+    setDensity(initialDensity, { persist: false });
+    updateShuffleButton();
+    rebuildActiveCardIds();
+    syncFullscreenFromDocument();
 
     // Initialize the UI
     updateProgress();
