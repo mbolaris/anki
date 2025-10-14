@@ -101,7 +101,6 @@
     const progressBar = viewer.querySelector(".progress-bar");
     const progressBarInner = viewer.querySelector(".progress-bar__inner");
     const knownCountEl = viewer.querySelector('[data-role="known-count"]');
-    const overflowDetails = viewer.querySelector(".study-overflow");
     const emptyState = viewer.querySelector('[data-role="empty-state"]');
     const helpToggleButton = viewer.querySelector('[data-action="toggle-help"]');
     const helpOverlay = document.querySelector('[data-role="shortcut-overlay"]');
@@ -516,11 +515,11 @@
       }
       const count = knownSet.size;
       if (count === 0) {
-        knownCountEl.textContent = "Known: 0";
-        knownCountEl.dataset.state = "empty";
+        knownCountEl.textContent = "No cards marked as known";
+      } else if (count === 1) {
+        knownCountEl.textContent = "1 card marked as known";
       } else {
-        knownCountEl.textContent = `Known: ${count}`;
-        knownCountEl.dataset.state = "active";
+        knownCountEl.textContent = `${count} cards marked as known`;
       }
     }
 
@@ -589,9 +588,6 @@
     function setDensity(mode, { persist = true } = {}) {
       const normalized = mode === "comfortable" ? "comfortable" : "compact";
       viewer.dataset.density = normalized;
-      if (document.body) {
-        document.body.dataset.density = normalized;
-      }
       updateDensityButton(normalized);
       if (persist) {
         writeToStorage(densityKey, normalized);
@@ -915,9 +911,6 @@
         event.preventDefault();
         performAction(action);
         flashControl(action);
-        if (overflowDetails && target.closest(".study-overflow__menu")) {
-          overflowDetails.open = false;
-        }
       }
     });
 
