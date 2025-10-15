@@ -115,6 +115,12 @@ def test_media_route_serves_files(client, sample_collection: DeckCollection) -> 
     response = client.get("/media/diagram.png")
     assert response.status_code == 200
     assert response.data == b"PNG"
+    # Ensure any file-like objects opened by the response are closed to avoid
+    # ResourceWarning about unclosed files when running the test suite.
+    try:
+        response.close()
+    except Exception:
+        pass
 
 
 def test_cloze_card_payload_contains_structure(client) -> None:
@@ -149,6 +155,12 @@ def test_media_route_returns_404_without_directory(app) -> None:
     app.config["MEDIA_DIRECTORY"] = None
     with app.test_client() as test_client:
         response = test_client.get("/media/diagram.png")
+    # Close the response explicitly in case the test client created any
+    # temporary file-like objects during handling.
+    try:
+        response.close()
+    except Exception:
+        pass
     assert response.status_code == 404
 
 
