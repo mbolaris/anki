@@ -4,19 +4,44 @@
   <section class="deck-list">
     <h2>Decks</h2>
     {% if collection.decks %}
+      <div class="deck-search">
+        <label class="deck-search__label" for="deck-filter">Filter decks</label>
+        <input
+          type="search"
+          id="deck-filter"
+          class="deck-search__input"
+          name="deck-filter"
+          placeholder="Start typing to filter decks"
+          autocomplete="off"
+          spellcheck="false"
+          data-role="deck-filter"
+        >
+      </div>
       <ul>
         {% for deck in collection.decks.values()|sort(attribute='name') %}
           {% set parts = deck.name.split('::') %}
           {% set indent_level = parts|length - 1 %}
           {% set display_name = parts[-1] if parts|length > 1 else deck.name %}
-          <li style="padding-left: {{ indent_level * 20 }}px;">
+          <li
+            style="padding-left: {{ indent_level * 20 }}px;"
+            data-role="deck-list-item"
+            data-search-value="{{ deck.name }} {{ display_name }}"
+          >
             <a href="{{ url_for('deck', deck_id=deck.deck_id) }}">{{ display_name }}</a>
             <span class="count">{{ deck.cards|length }} cards</span>
           </li>
         {% endfor %}
       </ul>
+      <p class="deck-filter__empty" data-role="deck-filter-empty" hidden aria-live="polite">
+        No decks match your filter.
+      </p>
     {% else %}
       <p>No decks were found in the package.</p>
     {% endif %}
   </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='index.js') }}" defer></script>
 {% endblock %}
