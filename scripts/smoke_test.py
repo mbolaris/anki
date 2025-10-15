@@ -39,7 +39,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "package",
         nargs="?",
-        default=str(DEFAULT_PACKAGE),
+        # Use POSIX-style path string for the default so tests that compare
+        # the string with forward slashes behave consistently across OSes.
+        default=str(DEFAULT_PACKAGE.as_posix()),
         help=(
             "Path to an .apkg file to load. Defaults to %(default)s if present."
         ),

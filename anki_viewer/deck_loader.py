@@ -308,15 +308,23 @@ def _load_from_sqlite(
     >>> _load_from_sqlite(Path('collection.anki21'), {}, '/media')  # doctest: +SKIP
     """
     try:
-        # Use the connection as a context manager so it is closed when we're
-        # done reading. Also convert the cards generator to a list while the
-        # connection is still open to avoid holding the DB file open after
-        # the temporary directory is removed.
-        with sqlite3.connect(str(collection_path)) as conn:
+        # Open the SQLite connection and ensure it is explicitly closed when
+        # we're done. Note: sqlite3.Connection's context manager commits or
+        # rollbacks but does not close the connection, which can leave open
+        # connections and trigger ResourceWarning on some platforms. Using
+        # a try/finally ensures the connection is closed.
+        conn = sqlite3.connect(str(collection_path))
+        try:
             conn.row_factory = sqlite3.Row
             deck_names = _read_deck_names(conn)
             models = _read_models(conn)
             cards = _read_cards(conn, deck_names, models, media_map, media_url_path)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                # Best-effort close; ignore errors during cleanup.
+                pass
     except sqlite3.Error as exc:  # pragma: no cover - defensive programming
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
 
