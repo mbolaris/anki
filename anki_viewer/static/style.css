@@ -17,14 +17,6 @@
   --surface-strong: rgba(255, 255, 255, 0.96);
   --shadow-soft: 0 20px 45px rgba(15, 23, 42, 0.12);
   --shadow-button: 0 10px 25px rgba(67, 56, 202, 0.22);
-  --cloze-hidden-bg: rgba(67, 56, 202, 0.18);
-  --cloze-hidden-bg-hover: rgba(67, 56, 202, 0.28);
-  --cloze-hidden-border: rgba(67, 56, 202, 0.35);
-  --cloze-hidden-text: #3730a3;
-  --cloze-revealed-bg: rgba(34, 197, 94, 0.25);
-  --cloze-revealed-border: rgba(34, 197, 94, 0.35);
-  --cloze-revealed-text: #047857;
-  --cloze-focus-ring: rgba(99, 102, 241, 0.35);
   --viewer-toolbar-height: 3rem;
   --toolbar-button-height: 2.5rem;
 }
@@ -39,14 +31,6 @@
     --surface-strong: rgba(15, 23, 42, 0.88);
     --shadow-soft: 0 26px 60px rgba(0, 0, 0, 0.38);
     --shadow-button: 0 16px 40px rgba(124, 58, 237, 0.25);
-    --cloze-hidden-bg: rgba(99, 102, 241, 0.32);
-    --cloze-hidden-bg-hover: rgba(99, 102, 241, 0.42);
-    --cloze-hidden-border: rgba(129, 140, 248, 0.55);
-    --cloze-hidden-text: #c7d2fe;
-    --cloze-revealed-bg: rgba(34, 197, 94, 0.35);
-    --cloze-revealed-border: rgba(74, 222, 128, 0.55);
-    --cloze-revealed-text: #bbf7d0;
-    --cloze-focus-ring: rgba(129, 140, 248, 0.45);
   }
 }
 
@@ -680,57 +664,28 @@ a {
 }
 
 .cloze {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.35rem;
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.cloze-placeholder {
   display: inline-block;
-  min-width: 2ch;
+  padding: 0 0.3rem;
+  line-height: 1.25;
 }
 
-.cloze-hidden {
-  background-color: var(--cloze-hidden-bg);
-  color: var(--cloze-hidden-text);
-  border-bottom: 2px solid var(--cloze-hidden-border);
-  cursor: pointer;
+.cloze.blank {
+  border-bottom: 2px solid currentColor;
+  opacity: 0.75;
+  white-space: pre-wrap;
 }
 
-.cloze-hidden:hover,
-.cloze-hidden:focus-visible {
-  background-color: var(--cloze-hidden-bg-hover);
-  box-shadow: 0 0 0 3px var(--cloze-focus-ring);
-  outline: none;
+.cloze.reveal {
+  border-radius: 0.35rem;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+  font-weight: 600;
 }
 
-.cloze-hidden:active {
-  transform: scale(0.98);
-}
-
-.cloze-hidden .cloze-hint {
-  opacity: 0.7;
-  font-size: 0.75rem;
-}
-
-.cloze-revealed {
-  background-color: var(--cloze-revealed-bg);
-  color: var(--cloze-revealed-text);
-  border-bottom: 2px solid var(--cloze-revealed-border);
-  animation: clozeReveal 0.3s ease;
-}
-
-.cloze-revealed .cloze-hint {
-  display: none;
-}
-
-.cloze-hint {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+@media (prefers-color-scheme: dark) {
+  .cloze.reveal {
+    background: rgba(248, 250, 252, 0.16);
+  }
 }
 
 .cloze-instructions {
@@ -744,17 +699,6 @@ a {
   border-radius: 0.6rem;
   background: rgba(15, 118, 110, 0.08);
   color: #0f766e;
-}
-
-@keyframes clozeReveal {
-  from {
-    filter: blur(6px);
-    opacity: 0;
-  }
-  to {
-    filter: blur(0);
-    opacity: 1;
-  }
 }
 
 .shortcut-overlay {

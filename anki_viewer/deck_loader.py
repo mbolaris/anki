@@ -458,10 +458,13 @@ def _read_cards(
         model = models.get(model_id) if model_id is not None else None
 
         template_index = int(row["template_ordinal"])
+        render_template_index = template_index
         field_map = _build_field_map(fields, model.fields if model else [])
 
-        if model and 0 <= template_index < len(model.templates):
-            template = model.templates[template_index]
+        if model and model.templates:
+            if not 0 <= render_template_index < len(model.templates):
+                render_template_index = render_template_index % len(model.templates)
+            template = model.templates[render_template_index]
             question_source = _render_anki_template(template.question_format, field_map)
             answer_context = dict(field_map)
             answer_context.setdefault("FrontSide", question_source)
@@ -518,7 +521,7 @@ def _read_cards(
                 note_id=int(row["note_id"]),
                 deck_id=deck_id,
                 deck_name=deck_name,
-                template_ordinal=int(row["template_ordinal"]),
+                template_ordinal=render_template_index,
                 question=question,
                 answer=answer,
                 card_type=card_type,
@@ -893,34 +896,27 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
     Examples
     --------
     >>> _render_cloze("{{c1::Paris}}", reveal=False, active_index=1)
-    '<span class="cloze cloze-hidden" data-cloze="1"><span class="cloze-placeholder">…</span></span>'
+    '<span class="cloze blank">…</span>'
     """
 
     if active_index is not None and active_index < 1:
         active_index = None
-
-    def render_placeholder(text: str) -> str:
-        return f'<span class="cloze-placeholder">{html_escape(text)}</span>'
 
     def replacement(match: re.Match[str]) -> str:
         ordinal_raw, content, hint = match.groups()
         ordinal = int(ordinal_raw)
         is_active = active_index is None or ordinal == active_index
 
-        if reveal and is_active:
-            hint_html = ""
-            if hint:
-                hint_html = f'<span class="cloze-hint">({html_escape(hint)})</span>'
-            return (
-                f'<span class="cloze cloze-revealed" data-cloze="{ordinal}">'
-                f"{html_escape(content)}{hint_html}</span>"
-            )
+        if reveal:
+            if is_active:
+                return f'<mark class="cloze reveal">{html_escape(content)}</mark>'
+            return '<span class="cloze blank">…</span>'
 
-        placeholder_text = "…"
-        if hint and is_active and not reveal:
-            placeholder_text = hint
-        placeholder = render_placeholder(placeholder_text)
-        return f'<span class="cloze cloze-hidden" data-cloze="{ordinal}">{placeholder}</span>'
+        if is_active and hint:
+            placeholder = html_escape(hint)
+        else:
+            placeholder = "…"
+        return f'<span class="cloze blank">{placeholder}</span>'
 
     return _CLOZE_PATTERN.sub(replacement, html)
 
