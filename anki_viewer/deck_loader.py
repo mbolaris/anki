@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
+from html import escape as html_escape
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List
@@ -18,7 +19,7 @@ from .card_types import detect_card_type, parse_cloze_deletions
 _FIELD_SEPARATOR = "\x1f"
 _IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
 _UNQUOTED_IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)([^'\"\s>]+)", re.IGNORECASE)
-_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}", re.DOTALL)
+_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::([^}]*))?\}\}", re.DOTALL)
 
 
 class DeckLoadError(RuntimeError):
@@ -483,16 +484,32 @@ def _read_cards(
         card_type = detect_card_type(card_preview)
 
         original_question = question
+        active_cloze_index = None
         cloze_deletions: List[Dict[str, object]] = []
         question_revealed = None
         if "{{c" in question:
             cloze_deletions = parse_cloze_deletions(question)
-            rendered_question = _render_cloze(question, reveal=False)
-            rendered_answer = _render_cloze(question, reveal=True)
-            question_revealed = rendered_answer
+            if card_type == "cloze":
+                active_cloze_index = template_index + 1
+            rendered_question = _render_cloze(
+                question,
+                reveal=False,
+                active_index=active_cloze_index,
+            )
+            rendered_answer = _render_cloze(
+                question,
+                reveal=True,
+                active_index=active_cloze_index,
+            )
+            extra_answer = ""
             if answer.strip():
-                rendered_answer = f"{rendered_answer}<div class=\"cloze-extra-answer\">{answer}</div>"
+                without_question = answer.replace(original_question, "", 1)
+                if without_question != answer:
+                    extra_answer = without_question.strip()
+            if extra_answer:
+                rendered_answer = f"{rendered_answer}{extra_answer}"
             question, answer = rendered_question, rendered_answer
+            question_revealed = rendered_answer
         deck_id = int(row["deck_id"])
         deck_name = deck_names.get(deck_id, str(deck_id))
         cards.append(
@@ -853,7 +870,7 @@ def _prepare_media_directory(destination: Path) -> None:
             continue
 
 
-def _render_cloze(html: str, *, reveal: bool) -> str:
+def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -> str:
     """Convert Anki cloze deletions to semantic HTML spans.
 
     Parameters
@@ -863,6 +880,10 @@ def _render_cloze(html: str, *, reveal: bool) -> str:
     reveal:
         When ``True`` the cloze text is revealed, otherwise placeholders are
         rendered.
+    active_index:
+        Optional cloze number that should be treated as active. When provided,
+        only this cloze is revealed on the back of the card and receives the
+        hint text on the front.
 
     Returns
     -------
@@ -871,27 +892,34 @@ def _render_cloze(html: str, *, reveal: bool) -> str:
 
     Examples
     --------
-    >>> _render_cloze("{{c1::Paris}}", reveal=False)
-    '<span class="cloze cloze-hidden" data-cloze="1"><span class="cloze-placeholder">[...]</span></span>'
+    >>> _render_cloze("{{c1::Paris}}", reveal=False, active_index=1)
+    '<span class="cloze cloze-hidden" data-cloze="1"><span class="cloze-placeholder">…</span></span>'
     """
 
+    if active_index is not None and active_index < 1:
+        active_index = None
+
+    def render_placeholder(text: str) -> str:
+        return f'<span class="cloze-placeholder">{html_escape(text)}</span>'
+
     def replacement(match: re.Match[str]) -> str:
-        ordinal, content, hint = match.groups()
-        if reveal:
+        ordinal_raw, content, hint = match.groups()
+        ordinal = int(ordinal_raw)
+        is_active = active_index is None or ordinal == active_index
+
+        if reveal and is_active:
             hint_html = ""
             if hint:
-                hint_html = f'<span class="cloze-hint">({hint})</span>'
+                hint_html = f'<span class="cloze-hint">({html_escape(hint)})</span>'
             return (
                 f'<span class="cloze cloze-revealed" data-cloze="{ordinal}">'
-                f"{content}{hint_html}</span>"
+                f"{html_escape(content)}{hint_html}</span>"
             )
 
-        placeholder = '<span class="cloze-placeholder">[...]</span>'
-        if hint:
-            placeholder = (
-                '<span class="cloze-placeholder">[...]</span>'
-                f'<span class="cloze-hint">({hint})</span>'
-            )
+        placeholder_text = "…"
+        if hint and is_active and not reveal:
+            placeholder_text = hint
+        placeholder = render_placeholder(placeholder_text)
         return f'<span class="cloze cloze-hidden" data-cloze="{ordinal}">{placeholder}</span>'
 
     return _CLOZE_PATTERN.sub(replacement, html)
