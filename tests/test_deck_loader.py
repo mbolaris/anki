@@ -130,8 +130,8 @@ def test_read_media_copies_manifest(tmp_path: Path, tmp_media_dir: Path) -> None
 
 def test_render_cloze_masks_and_reveals_active_index() -> None:
     html = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=False, active_index=1)
-    assert 'class="cloze blank"' in html
-    assert "…" in html
+    assert '<span class="cloze blank" aria-hidden="true"></span>' in html
+    assert "…" not in html
     revealed = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=True, active_index=1)
     assert '<mark class="cloze reveal">Heart</mark>' in revealed
     assert "Heart" in revealed
@@ -140,7 +140,8 @@ def test_render_cloze_masks_and_reveals_active_index() -> None:
 def test_render_cloze_only_reveals_selected_deletion() -> None:
     text = "{{c1::Heart::Organ}} pumps {{c2::blood::Fluid}}"
     front = deck_loader._render_cloze(text, reveal=False, active_index=2)
-    assert front.count("cloze blank") == 2
+    assert front.count("cloze blank") == 1
+    assert "cloze hint" in front
     assert "Fluid" in front
     assert "Organ" not in front
     back = deck_loader._render_cloze(text, reveal=True, active_index=2)
@@ -219,14 +220,16 @@ def test_load_from_sqlite_handles_multi_cloze_notes(tmp_path: Path, tmp_media_di
     assert set(multi_cards) == {3, 4}
 
     first = multi_cards[3]
-    assert first.question.count("cloze blank") == 2
+    assert first.question.count("cloze blank") == 1
+    assert first.question.count("cloze hint") == 1
     assert "Larger" in first.question
     assert "Lower" not in first.question
     assert '<mark class="cloze reveal">Alpha</mark>' in first.answer
     assert "Beta" not in first.answer
 
     second = multi_cards[4]
-    assert second.question.count("cloze blank") == 2
+    assert second.question.count("cloze blank") == 1
+    assert second.question.count("cloze hint") == 1
     assert "Lower" in second.question
     assert "Larger" not in second.question
     assert '<mark class="cloze reveal">Beta</mark>' in second.answer
