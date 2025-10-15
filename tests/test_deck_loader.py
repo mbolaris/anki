@@ -128,11 +128,25 @@ def test_read_media_copies_manifest(tmp_path: Path, tmp_media_dir: Path) -> None
     assert (tmp_media_dir / "diagram.png").exists()
 
 
-def test_render_cloze_outputs_placeholder() -> None:
-    html = deck_loader._render_cloze("{{c1::Heart}}", reveal=False)
+def test_render_cloze_masks_and_reveals_active_index() -> None:
+    html = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=False, active_index=1)
     assert "cloze-hidden" in html
-    revealed = deck_loader._render_cloze("{{c1::Heart}}", reveal=True)
+    assert "…" in html
+    revealed = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=True, active_index=1)
+    assert "cloze-revealed" in revealed
     assert "Heart" in revealed
+
+
+def test_render_cloze_only_reveals_selected_deletion() -> None:
+    text = "{{c1::Heart::Organ}} pumps {{c2::blood::Fluid}}"
+    front = deck_loader._render_cloze(text, reveal=False, active_index=2)
+    assert front.count("cloze-hidden") == 2
+    assert "Fluid" in front
+    assert "Organ" not in front
+    back = deck_loader._render_cloze(text, reveal=True, active_index=2)
+    assert "blood" in back
+    assert "Heart" not in back
+    assert back.count("cloze-hidden") == 1
 
 
 def test_render_anki_template_supports_sections() -> None:
@@ -160,6 +174,8 @@ def test_load_from_sqlite_parses_cards(tmp_path: Path, tmp_media_dir: Path) -> N
     assert "<hr id=answer>" in basic_card.answer
     assert cloze_card.card_type == "cloze"
     assert cloze_card.cloze_deletions == [{"num": 1, "content": "Heart"}]
+    assert "{{c1" not in cloze_card.answer
+    assert "cloze-revealed" in cloze_card.answer
 
 
 def test_load_collection_raises_for_missing_package(tmp_path: Path) -> None:

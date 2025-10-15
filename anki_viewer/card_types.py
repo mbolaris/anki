@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, List, Sequence
 
-_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::(.*?))?\}\}", re.IGNORECASE | re.DOTALL)
+_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::([^}]*))?\}\}", re.IGNORECASE | re.DOTALL)
 _IMAGE_PATTERN = re.compile(r"<img[^>]+src=[\"']([^\"']+)[\"']", re.IGNORECASE)
 
 
