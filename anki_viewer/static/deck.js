@@ -179,6 +179,8 @@
       ["R", "random"],
       ["k", "mark-known"],
       ["K", "mark-known"],
+      ["d", "toggle-debug"],
+      ["D", "toggle-debug"],
     ]);
 
     function persistViewed() {
@@ -569,6 +571,45 @@
       setHelpOpen(false);
     }
 
+    function toggleDebug() {
+      const activeCard = getActiveCardElement();
+      if (!activeCard) {
+        return;
+      }
+      const debugPanel = activeCard.querySelector('[data-role="debug-panel"]');
+      if (!debugPanel) {
+        return;
+      }
+      debugPanel.hidden = !debugPanel.hidden;
+      if (!debugPanel.hidden) {
+        debugPanel.setAttribute("open", "");
+      } else {
+        debugPanel.removeAttribute("open");
+      }
+    }
+
+    async function fetchCardData(deckId, cardId) {
+      try {
+        const url = `/deck/${deckId}/card/${cardId}.json`;
+        console.log(`Fetching card data from: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log("Card data:", data);
+        const jsonPreElement = document.querySelector(`[data-role="debug-json-${cardId}"]`);
+        if (jsonPreElement) {
+          jsonPreElement.textContent = JSON.stringify(data, null, 2);
+          jsonPreElement.style.display = "block";
+        }
+        return data;
+      } catch (error) {
+        console.error("Failed to fetch card data:", error);
+        alert(`Failed to fetch card data: ${error.message}`);
+      }
+    }
+
     function flashControl(action) {
       if (!action) {
         return;
@@ -620,6 +661,9 @@
         case "close-help":
           closeHelp();
           break;
+        case "toggle-debug":
+          toggleDebug();
+          break;
         default:
           break;
       }
@@ -635,7 +679,14 @@
         return;
       }
       const action = target.getAttribute("data-action");
-      if (action) {
+      if (action === "fetch-card-data") {
+        event.preventDefault();
+        const deckId = target.getAttribute("data-deck-id");
+        const cardId = target.getAttribute("data-card-id");
+        if (deckId && cardId) {
+          fetchCardData(deckId, cardId);
+        }
+      } else if (action) {
         event.preventDefault();
         performAction(action);
         flashControl(action);

@@ -467,8 +467,9 @@ a {
   grid-area: 1 / 1;
   width: min(100%, 65ch);
   opacity: 0;
-  transform: translateY(20px) scale(0.98);
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transform: translateY(30px) scale(0.96);
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 
@@ -561,21 +562,36 @@ a {
 }
 
 .card-face {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 0.8rem;
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition: opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
 }
 
 .card-face.question {
-  display: flex;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  position: relative;
 }
 
 .card.revealed .card-face.question {
-  display: none;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+  pointer-events: none;
+  position: absolute;
 }
 
 .card.revealed .card-face.answer {
-  display: flex;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  position: relative;
 }
 
 .card-instruction {
@@ -768,6 +784,150 @@ a {
 .shortcut-list dd {
   margin: 0;
   color: var(--muted);
+}
+
+/* Debug Panel Styles */
+.debug-panel {
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  border-radius: 0.9rem;
+  padding: 0.9rem 1.1rem;
+  background: rgba(251, 146, 60, 0.08);
+  margin-top: 0.75rem;
+}
+
+.debug-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #ea580c;
+  user-select: none;
+}
+
+.debug-panel summary:hover {
+  color: #c2410c;
+}
+
+.debug-content {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.debug-section {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.9rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  .debug-section {
+    background: rgba(15, 23, 42, 0.5);
+  }
+}
+
+.debug-section h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #ea580c;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.debug-info {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+.debug-info dt {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.debug-info dd {
+  margin: 0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  word-break: break-all;
+}
+
+.debug-code {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (prefers-color-scheme: dark) {
+  .debug-code {
+    background: rgba(15, 23, 42, 0.8);
+    border-color: rgba(71, 85, 105, 0.5);
+  }
+}
+
+.debug-field {
+  margin-bottom: 0.75rem;
+}
+
+.debug-field:last-child {
+  margin-bottom: 0;
+}
+
+.debug-help {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.debug-help code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.debug-button {
+  appearance: none;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  background: linear-gradient(135deg, #ea580c, #f97316);
+  color: white;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.debug-button:hover,
+.debug-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.3);
+  outline: none;
+}
+
+.debug-button:active {
+  transform: translateY(0);
+}
+
+.debug-json {
+  margin-top: 0.75rem;
+  max-height: 400px;
+  overflow: auto;
 }
 
 @media (max-width: 640px) {

@@ -14,12 +14,6 @@
     <header class="card-header">
       <div class="card-header__primary">
         <span class="card-chip card-chip--primary">Card {{ display_number }}</span>
-        <span class="card-chip">Template {{ card.template_ordinal + 1 }}</span>
-      </div>
-      <div class="card-header__meta">
-        <span class="card-meta-item">Note {{ card.note_id }}</span>
-        <span class="card-meta-item">ID {{ card.card_id }}</span>
-        <span class="card-meta-item card-meta-item--type">{{ card.card_type|title }}</span>
       </div>
     </header>
     <div class="card-body">
@@ -65,6 +59,76 @@
           </dl>
         </details>
       {% endif %}
+      <details class="debug-panel" data-role="debug-panel" hidden>
+        <summary>Debug Information</summary>
+        <div class="debug-content">
+          <section class="debug-section">
+            <h5>Card Metadata</h5>
+            <dl class="debug-info">
+              <dt>Card ID:</dt>
+              <dd>{{ card.card_id }}</dd>
+              <dt>Note ID:</dt>
+              <dd>{{ card.note_id }}</dd>
+              <dt>Deck ID:</dt>
+              <dd>{{ card.deck_id }}</dd>
+              <dt>Deck Name:</dt>
+              <dd>{{ card.deck_name }}</dd>
+              <dt>Template Ordinal:</dt>
+              <dd>{{ card.template_ordinal }}</dd>
+              <dt>Card Type:</dt>
+              <dd>{{ card.card_type }}</dd>
+            </dl>
+          </section>
+
+          <section class="debug-section">
+            <h5>Raw Question HTML</h5>
+            <pre class="debug-code">{{ card.question }}</pre>
+          </section>
+
+          <section class="debug-section">
+            <h5>Raw Answer HTML</h5>
+            <pre class="debug-code">{{ card.answer }}</pre>
+          </section>
+
+          {% if card.question_revealed %}
+          <section class="debug-section">
+            <h5>Question Revealed HTML</h5>
+            <pre class="debug-code">{{ card.question_revealed }}</pre>
+          </section>
+          {% endif %}
+
+          {% if card.card_type == "cloze" %}
+          <section class="debug-section">
+            <h5>Cloze Information</h5>
+            <dl class="debug-info">
+              <dt>Raw Question:</dt>
+              <dd><pre class="debug-code">{{ card.raw_question }}</pre></dd>
+              <dt>Cloze Deletions:</dt>
+              <dd><pre class="debug-code">{{ card.cloze_deletions | tojson(indent=2) }}</pre></dd>
+            </dl>
+          </section>
+          {% endif %}
+
+          {% if card.extra_fields %}
+          <section class="debug-section">
+            <h5>Extra Fields ({{ card.extra_fields|length }})</h5>
+            {% for value in card.extra_fields %}
+              <div class="debug-field">
+                <strong>Field {{ loop.index }}:</strong>
+                <pre class="debug-code">{{ value }}</pre>
+              </div>
+            {% endfor %}
+          </section>
+          {% endif %}
+
+          <section class="debug-section">
+            <h5>API Data</h5>
+            <p class="debug-help">Card data from: <code>{{ url_for('card_data', deck_id=deck.deck_id, card_id=card.card_id) }}</code></p>
+            <button type="button" class="debug-button" data-action="fetch-card-data" data-card-id="{{ card.card_id }}" data-deck-id="{{ deck.deck_id }}">Fetch & Log JSON</button>
+            <pre class="debug-json" data-role="debug-json-{{ card.card_id }}" style="display:none;"></pre>
+          </section>
+        </div>
+      </details>
     </div>
   </article>
 {% endmacro %}

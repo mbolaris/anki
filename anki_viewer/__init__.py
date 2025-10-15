@@ -273,6 +273,63 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
             if image_sources:
                 payload["images"] = image_sources
 
+        # Add debug information
+        payload["debug"] = {
+            "note_id": card.note_id,
+            "deck_id": card.deck_id,
+            "deck_name": card.deck_name,
+            "template_ordinal": card.template_ordinal,
+            "raw_question": card.raw_question,
+            "cloze_deletions": card.cloze_deletions,
+            "question_html_length": len(card.question) if card.question else 0,
+            "answer_html_length": len(card.answer) if card.answer else 0,
+            "has_question_revealed": card.question_revealed is not None,
+            "extra_fields_count": len(card.extra_fields) if card.extra_fields else 0,
+        }
+
+        # Add image debugging info for ALL cards (not just image type)
+        all_image_sources = _gather_image_sources(card, media_url_path=media_url_path)
+        if all_image_sources or card.card_type == "image":
+            payload["debug"]["image_sources_found"] = all_image_sources
+            payload["debug"]["media_url_path"] = media_url_path
+            payload["debug"]["media_directory"] = str(current_state["media_directory"]) if current_state["media_directory"] else None
+
+            # Check which images actually exist
+            media_dir = current_state["media_directory"]
+            if media_dir and media_dir.exists():
+                image_status = {}
+                for img_src in all_image_sources:
+                    # Extract filename from URL (e.g., /media/Formyl_Group_1.png -> Formyl_Group_1.png)
+                    filename = img_src.split('/')[-1] if '/' in img_src else img_src
+                    file_path = media_dir / filename
+                    image_status[img_src] = {
+                        "filename": filename,
+                        "exists_on_disk": file_path.exists(),
+                        "full_path": str(file_path) if file_path.exists() else None,
+                    }
+                payload["debug"]["image_file_status"] = image_status
+
+            # Show sample of available media files
+            if current_state["deck_collection"]:
+                payload["debug"]["available_media_files_sample"] = list(current_state["deck_collection"].media_filenames.keys())[:10]
+                payload["debug"]["total_media_files"] = len(current_state["deck_collection"].media_filenames)
+
+                # Search for similar filenames for missing images
+                similar_files = {}
+                for img_src in all_image_sources:
+                    filename = img_src.split('/')[-1] if '/' in img_src else img_src
+                    # Remove extension and underscores for fuzzy matching
+                    base_name = filename.rsplit('.', 1)[0].lower().replace('_', ' ').replace('-', ' ')
+                    matches = []
+                    for media_file in current_state["deck_collection"].media_filenames.keys():
+                        media_base = media_file.rsplit('.', 1)[0].lower().replace('_', ' ').replace('-', ' ')
+                        if base_name in media_base or media_base in base_name:
+                            matches.append(media_file)
+                    if matches:
+                        similar_files[filename] = matches[:5]  # Limit to 5 matches
+                if similar_files:
+                    payload["debug"]["similar_media_files"] = similar_files
+
         return jsonify(payload)
 
     @app.route("/api/cards")

@@ -19,4 +19,4 @@ data_dir = Path(DATA_DIR_STR) if DATA_DIR_STR else None
 app = create_app(apkg_path=apkg_path, media_url_path=MEDIA_URL_PATH, data_dir=data_dir)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)

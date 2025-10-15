@@ -80,6 +80,16 @@
           <button
             type="button"
             class="toolbar-button"
+            data-action="toggle-debug"
+            title="Toggle debug information (D)"
+          >
+            <span class="toolbar-button__icon" aria-hidden="true">🐛</span>
+            <span class="toolbar-button__label">Debug</span>
+            <span class="toolbar-button__hint" aria-hidden="true">D</span>
+          </button>
+          <button
+            type="button"
+            class="toolbar-button"
             data-action="toggle-help"
             aria-haspopup="dialog"
             aria-expanded="false"
@@ -157,6 +167,10 @@
         <div>
           <dt><kbd>K</kbd></dt>
           <dd>Mark the current card as known</dd>
+        </div>
+        <div>
+          <dt><kbd>D</kbd></dt>
+          <dd>Toggle debug information panel</dd>
         </div>
         <div>
           <dt><kbd>?</kbd></dt>
