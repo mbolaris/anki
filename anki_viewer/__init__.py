@@ -145,6 +145,26 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
             "current_package": current_state["package_path"],
         }
 
+    def _build_deck_filters(collection: DeckCollection) -> list[dict[str, str | None]]:
+        """Create metadata describing available top-level deck filters."""
+
+        root_names: dict[str, None] = {}
+        for deck in collection.decks.values():
+            root = deck.name.split("::", 1)[0]
+            root_names[root] = None
+
+        shortcuts = [str(number) for number in range(1, 10)]
+        filters: list[dict[str, str | None]] = []
+        for index, root_name in enumerate(sorted(root_names.keys(), key=str.casefold)):
+            shortcut = shortcuts[index] if index < len(shortcuts) else None
+            filters.append({
+                "label": root_name,
+                "value": root_name,
+                "shortcut": shortcut,
+            })
+
+        return filters
+
     @app.route("/")
     def index():
         """Render the landing page or missing package notice.
@@ -161,7 +181,13 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         """
         if current_state["deck_collection"] is None:
             return render_template("missing_package.html", package_path=current_state["package_path"])
-        return render_template("index.html", collection=current_state["deck_collection"])
+        collection = current_state["deck_collection"]
+        filters = _build_deck_filters(collection)
+        return render_template(
+            "index.html",
+            collection=collection,
+            deck_filters=filters,
+        )
 
     @app.route("/switch/<path:filename>")
     def switch_deck(filename: str):

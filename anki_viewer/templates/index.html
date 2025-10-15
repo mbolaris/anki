@@ -4,28 +4,55 @@
   <section class="deck-list">
     <h2>Decks</h2>
     {% if collection.decks %}
-      <div class="deck-search">
-        <label class="deck-search__label" for="deck-filter">Filter decks</label>
-        <input
-          type="search"
-          id="deck-filter"
-          class="deck-search__input"
-          name="deck-filter"
-          placeholder="Start typing to filter decks"
-          autocomplete="off"
-          spellcheck="false"
-          data-role="deck-filter"
+      <div class="deck-filter">
+        <span class="deck-filter__label" id="deck-filter-label">Filter decks</span>
+        <div
+          class="deck-filter__controls"
+          role="group"
+          aria-labelledby="deck-filter-label"
         >
+          <button
+            type="button"
+            class="deck-filter__button is-active"
+            data-role="deck-filter-button"
+            data-filter="all"
+            data-shortcut="0"
+            aria-pressed="true"
+          >
+            All decks
+            <span class="deck-filter__shortcut" aria-hidden="true">0</span>
+            <span class="sr-only">(Shortcut 0)</span>
+          </button>
+          {% for filter in deck_filters %}
+            <button
+              type="button"
+              class="deck-filter__button"
+              data-role="deck-filter-button"
+              data-filter="{{ filter.value }}"
+              aria-pressed="false"
+              {% if filter.shortcut %}data-shortcut="{{ filter.shortcut }}"{% endif %}
+            >
+              {{ filter.label }}
+              {% if filter.shortcut %}
+                <span class="deck-filter__shortcut" aria-hidden="true">{{ filter.shortcut }}</span>
+                <span class="sr-only">(Shortcut {{ filter.shortcut }})</span>
+              {% endif %}
+            </button>
+          {% endfor %}
+        </div>
+        <p class="deck-filter__hint">Press number keys to switch filters. Press 0 or Escape to show all decks.</p>
       </div>
       <ul>
         {% for deck in collection.decks.values()|sort(attribute='name') %}
           {% set parts = deck.name.split('::') %}
           {% set indent_level = parts|length - 1 %}
           {% set display_name = parts[-1] if parts|length > 1 else deck.name %}
+          {% set root_name = parts[0] %}
           <li
             style="padding-left: {{ indent_level * 20 }}px;"
             data-role="deck-list-item"
             data-search-value="{{ deck.name }} {{ display_name }}"
+            data-root-name="{{ root_name }}"
           >
             <a href="{{ url_for('deck', deck_id=deck.deck_id) }}">{{ display_name }}</a>
             <span class="count">{{ deck.cards|length }} cards</span>
