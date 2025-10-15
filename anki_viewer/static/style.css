@@ -676,10 +676,6 @@ a {
   opacity: 0.6;
 }
 
-.cloze.blank::before {
-  content: "\00a0";
-}
-
 .cloze.hint {
   display: inline-block;
   padding: 0 0.35rem;

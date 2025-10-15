@@ -130,8 +130,7 @@ def test_read_media_copies_manifest(tmp_path: Path, tmp_media_dir: Path) -> None
 
 def test_render_cloze_masks_and_reveals_active_index() -> None:
     html = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=False, active_index=1)
-    assert '<span class="cloze blank" aria-hidden="true"></span>' in html
-    assert "…" not in html
+    assert '<span class="cloze blank" aria-label="hidden">[…]</span>' in html
     revealed = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=True, active_index=1)
     assert '<mark class="cloze reveal">Heart</mark>' in revealed
     assert "Heart" in revealed
@@ -140,35 +139,37 @@ def test_render_cloze_masks_and_reveals_active_index() -> None:
 def test_render_cloze_only_reveals_selected_deletion() -> None:
     text = "{{c1::Heart::Organ}} pumps {{c2::blood::Fluid}}"
     front = deck_loader._render_cloze(text, reveal=False, active_index=2)
-    assert front.count("cloze blank") == 1
-    assert "cloze hint" in front
+    assert "cloze blank" not in front
+    assert front.count("cloze hint") == 1
     assert "Fluid" in front
+    assert "Heart" in front
     assert "Organ" not in front
     back = deck_loader._render_cloze(text, reveal=True, active_index=2)
     assert "blood" in back
-    assert "Heart" not in back
-    assert back.count("cloze blank") == 1
+    assert "Heart" in back
+    assert back.count("cloze blank") == 0
+    assert "Organ" not in back
 
 
 def test_render_cloze_reveals_all_matching_indices() -> None:
     text = "{{c1::Alpha}} and {{c1::Beta}} while {{c2::Gamma}}"
     front = deck_loader._render_cloze(text, reveal=False, active_index=1)
-    assert front.count("cloze blank") == 3
+    assert front.count("cloze blank") == 2
     assert "Alpha" not in front
     assert "Beta" not in front
-    assert "Gamma" not in front
+    assert "Gamma" in front
 
     back = deck_loader._render_cloze(text, reveal=True, active_index=1)
     assert '<mark class="cloze reveal">Alpha</mark>' in back
     assert '<mark class="cloze reveal">Beta</mark>' in back
-    assert "Gamma" not in back
-    assert back.count("cloze blank") == 1
+    assert "Gamma" in back
+    assert back.count("cloze blank") == 0
 
 
 def test_render_cloze_supports_uppercase_markers() -> None:
     front = deck_loader._render_cloze("{{C1::Lambda}}", reveal=False, active_index=1)
     assert "{{C1" not in front
-    assert '<span class="cloze blank" aria-hidden="true"></span>' in front
+    assert '<span class="cloze blank" aria-label="hidden">[…]</span>' in front
 
     back = deck_loader._render_cloze("{{C1::Lambda}}", reveal=True, active_index=1)
     assert '<mark class="cloze reveal">Lambda</mark>' in back
@@ -226,9 +227,13 @@ def test_load_from_sqlite_renders_uppercase_cloze(tmp_path: Path, tmp_media_dir:
 
     assert cloze_card.card_type == "cloze"
     assert "{{C1" not in cloze_card.question
-    assert cloze_card.question.count("cloze blank") == 3
-    assert cloze_card.answer.count("cloze blank") == 2
+    assert cloze_card.question.count("cloze blank") == 1
+    assert "Speed of light" in cloze_card.question
+    assert "Frequency" in cloze_card.question
+    assert cloze_card.answer.count("cloze blank") == 0
     assert '<mark class="cloze reveal">Wavelength</mark>' in cloze_card.answer
+    assert "Speed of light" in cloze_card.answer
+    assert "Frequency" in cloze_card.answer
     assert cloze_card.cloze_deletions == [
         {"num": 1, "content": "Wavelength"},
         {"num": 2, "content": "Speed of light"},
@@ -262,20 +267,24 @@ def test_load_from_sqlite_handles_multi_cloze_notes(tmp_path: Path, tmp_media_di
     assert set(multi_cards) == {3, 4}
 
     first = multi_cards[3]
-    assert first.question.count("cloze blank") == 1
+    assert first.question.count("cloze blank") == 0
     assert first.question.count("cloze hint") == 1
     assert "Larger" in first.question
+    assert "Beta" in first.question
     assert "Lower" not in first.question
     assert '<mark class="cloze reveal">Alpha</mark>' in first.answer
-    assert "Beta" not in first.answer
+    assert "Beta" in first.answer
+    assert "Larger" not in first.answer
 
     second = multi_cards[4]
-    assert second.question.count("cloze blank") == 1
+    assert second.question.count("cloze blank") == 0
     assert second.question.count("cloze hint") == 1
     assert "Lower" in second.question
+    assert "Alpha" in second.question
     assert "Larger" not in second.question
     assert '<mark class="cloze reveal">Beta</mark>' in second.answer
-    assert "Alpha" not in second.answer
+    assert "Alpha" in second.answer
+    assert "Lower" not in second.answer
 
 
 def test_load_collection_raises_for_missing_package(tmp_path: Path) -> None:
