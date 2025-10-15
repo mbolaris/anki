@@ -10,6 +10,8 @@
   --accent-basic: #2563eb;
   --accent-cloze: #7c3aed;
   --accent-image: #059669;
+  /* softened highlight color to replace bright yellow for better readability */
+  --highlight: #d69f33; /* softer muted-gold */
   --card-bg: #ffffff;
   --card-border: rgba(148, 163, 184, 0.35);
   --muted: #64748b;
@@ -652,6 +654,14 @@ a {
 
 .card.revealed .card-face.answer .content {
   color: #047857;
+}
+
+/* Replace instances of bright yellow used for highlights with the softer --highlight variable */
+.content .highlight,
+.cloze.highlight,
+.highlighted-text {
+  color: var(--highlight);
+  background: color-mix(in oklab, var(--highlight) 16%, transparent);
 }
 
 .card .content.has-revealed {
