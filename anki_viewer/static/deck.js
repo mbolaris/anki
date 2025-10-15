@@ -100,7 +100,6 @@
     const progressLabel = viewer.querySelector('[data-role="progress-percent"]');
     const progressBar = viewer.querySelector(".progress-bar");
     const progressBarInner = viewer.querySelector(".progress-bar__inner");
-    const knownCountEl = viewer.querySelector('[data-role="known-count"]');
     const emptyState = viewer.querySelector('[data-role="empty-state"]');
     const helpToggleButton = viewer.querySelector('[data-action="toggle-help"]');
     const helpOverlay = document.querySelector('[data-role="shortcut-overlay"]');
@@ -506,20 +505,6 @@
       }
     }
 
-    function updateKnownCount() {
-      if (!knownCountEl) {
-        return;
-      }
-      const count = knownSet.size;
-      if (count === 0) {
-        knownCountEl.textContent = "No cards marked as known";
-      } else if (count === 1) {
-        knownCountEl.textContent = "1 card marked as known";
-      } else {
-        knownCountEl.textContent = `${count} cards marked as known`;
-      }
-    }
-
     function updateProgress() {
       if (!progressBar || !progressBarInner || !progressLabel) {
         return;
@@ -742,7 +727,6 @@
         resetClozeForCard(card);
       }
       activeCardIds = activeCardIds.filter((id) => id !== cardId);
-      updateKnownCount();
       if (activeCardIds.length === 0) {
         showCardByIndex(0);
         return;
@@ -762,7 +746,6 @@
         resetClozeForCard(card);
       });
       updateProgress();
-      updateKnownCount();
       isShuffled = false;
       updateShuffleButton();
       rebuildActiveCardIds();
@@ -974,7 +957,6 @@
 
     // Initialize the UI
     updateProgress();
-    updateKnownCount();
     showCardByIndex(currentIndex);
   });
 })();

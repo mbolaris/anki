@@ -6,7 +6,7 @@
     <title>{% block title %}Anki Deck Viewer{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   </head>
-  <body>
+  <body{% block body_attrs %}{% endblock %}>
     {% block site_header %}
       <header class="site-header">
         <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
