@@ -165,6 +165,15 @@ def test_render_cloze_reveals_all_matching_indices() -> None:
     assert back.count("cloze blank") == 1
 
 
+def test_render_cloze_supports_uppercase_markers() -> None:
+    front = deck_loader._render_cloze("{{C1::Lambda}}", reveal=False, active_index=1)
+    assert "{{C1" not in front
+    assert '<span class="cloze blank" aria-hidden="true"></span>' in front
+
+    back = deck_loader._render_cloze("{{C1::Lambda}}", reveal=True, active_index=1)
+    assert '<mark class="cloze reveal">Lambda</mark>' in back
+
+
 def test_render_anki_template_supports_sections() -> None:
     template = "{{#Image}}<div>{{Image}}</div>{{/Image}}{{^Footer}}<span>No footer</span>{{/Footer}}"
     fields = {"Image": "<img src=\"diagram.png\">", "Footer": ""}
@@ -192,6 +201,39 @@ def test_load_from_sqlite_parses_cards(tmp_path: Path, tmp_media_dir: Path) -> N
     assert cloze_card.cloze_deletions == [{"num": 1, "content": "Heart"}]
     assert "{{c1" not in cloze_card.answer
     assert '<mark class="cloze reveal">Heart</mark>' in cloze_card.answer
+
+
+def test_load_from_sqlite_renders_uppercase_cloze(tmp_path: Path, tmp_media_dir: Path) -> None:
+    db_path = tmp_path / "collection.anki21"
+    _create_sqlite_collection(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        uppercase_fields = deck_loader._FIELD_SEPARATOR.join(
+            [
+                "{{C1::Wavelength}} equals {{C2::Speed of light}} divided by {{C3::Frequency}}",
+                "",
+                "",
+            ]
+        )
+        conn.execute("UPDATE notes SET flds = ? WHERE id = 2", (uppercase_fields,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    media_map = {"diagram.png": "diagram.png"}
+    collection = deck_loader._load_from_sqlite(db_path, media_map, "/media")
+    cloze_card = collection.decks[1].cards[1]
+
+    assert cloze_card.card_type == "cloze"
+    assert "{{C1" not in cloze_card.question
+    assert cloze_card.question.count("cloze blank") == 3
+    assert cloze_card.answer.count("cloze blank") == 2
+    assert '<mark class="cloze reveal">Wavelength</mark>' in cloze_card.answer
+    assert cloze_card.cloze_deletions == [
+        {"num": 1, "content": "Wavelength"},
+        {"num": 2, "content": "Speed of light"},
+        {"num": 3, "content": "Frequency"},
+    ]
 
 
 def test_load_from_sqlite_handles_multi_cloze_notes(tmp_path: Path, tmp_media_dir: Path) -> None:

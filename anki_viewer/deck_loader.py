@@ -19,7 +19,7 @@ from .card_types import detect_card_type, parse_cloze_deletions
 _FIELD_SEPARATOR = "\x1f"
 _IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)(['\"])(.*?)\2", re.IGNORECASE)
 _UNQUOTED_IMG_SRC_PATTERN = re.compile(r"(<img[^>]*\bsrc\s*=\s*)([^'\"\s>]+)", re.IGNORECASE)
-_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::([^}]*))?\}\}", re.DOTALL)
+_CLOZE_PATTERN = re.compile(r"\{\{c(\d+)::(.*?)(?:::([^}]*))?\}\}", re.DOTALL | re.IGNORECASE)
 
 
 class DeckLoadError(RuntimeError):
@@ -498,10 +498,9 @@ def _read_cards(
         active_cloze_index = None
         cloze_deletions: List[Dict[str, object]] = []
         question_revealed = None
-        if "{{c" in question:
+        if card_type == "cloze" and _CLOZE_PATTERN.search(question):
             cloze_deletions = parse_cloze_deletions(question)
-            if card_type == "cloze":
-                active_cloze_index = template_index + 1
+            active_cloze_index = template_index + 1
             rendered_question = _render_cloze(
                 question,
                 reveal=False,
