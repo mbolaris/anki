@@ -914,15 +914,20 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
         ordinal = int(ordinal_raw)
         is_active = active_index is None or ordinal == active_index
 
+        content_html = html_escape(content)
+        hint_text = (hint or "").strip()
+
         if reveal:
             if is_active:
-                return f'<mark class="cloze reveal">{html_escape(content)}</mark>'
-            return '<span class="cloze blank" aria-hidden="true"></span>'
+                return f'<mark class="cloze reveal">{content_html}</mark>'
+            return content_html
 
-        hint_text = (hint or "").strip()
-        if is_active and hint_text:
-            return f'<span class="cloze hint">{html_escape(hint_text)}</span>'
-        return '<span class="cloze blank" aria-hidden="true"></span>'
+        if is_active:
+            if hint_text:
+                return f'<span class="cloze hint">{html_escape(hint_text)}</span>'
+            return '<span class="cloze blank" aria-label="hidden">[…]</span>'
+
+        return content_html
 
     return _CLOZE_PATTERN.sub(replacement, html)
 
