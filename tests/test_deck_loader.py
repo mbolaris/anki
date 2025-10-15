@@ -149,6 +149,21 @@ def test_render_cloze_only_reveals_selected_deletion() -> None:
     assert back.count("cloze blank") == 1
 
 
+def test_render_cloze_reveals_all_matching_indices() -> None:
+    text = "{{c1::Alpha}} and {{c1::Beta}} while {{c2::Gamma}}"
+    front = deck_loader._render_cloze(text, reveal=False, active_index=1)
+    assert front.count("cloze blank") == 3
+    assert "Alpha" not in front
+    assert "Beta" not in front
+    assert "Gamma" not in front
+
+    back = deck_loader._render_cloze(text, reveal=True, active_index=1)
+    assert '<mark class="cloze reveal">Alpha</mark>' in back
+    assert '<mark class="cloze reveal">Beta</mark>' in back
+    assert "Gamma" not in back
+    assert back.count("cloze blank") == 1
+
+
 def test_render_anki_template_supports_sections() -> None:
     template = "{{#Image}}<div>{{Image}}</div>{{/Image}}{{^Footer}}<span>No footer</span>{{/Footer}}"
     fields = {"Image": "<img src=\"diagram.png\">", "Footer": ""}
