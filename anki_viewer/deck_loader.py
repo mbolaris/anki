@@ -307,26 +307,27 @@ def _load_from_sqlite(
     >>> from pathlib import Path
     >>> _load_from_sqlite(Path('collection.anki21'), {}, '/media')  # doctest: +SKIP
     """
+    # Open the SQLite connection and ensure it is explicitly closed when
+    # we're done. Note: sqlite3.Connection's context manager commits or
+    # rollbacks but does not close the connection, which can leave open
+    # connections and trigger ResourceWarning on some platforms. Using
+    # a try/finally ensures the connection is closed.
     try:
-        # Open the SQLite connection and ensure it is explicitly closed when
-        # we're done. Note: sqlite3.Connection's context manager commits or
-        # rollbacks but does not close the connection, which can leave open
-        # connections and trigger ResourceWarning on some platforms. Using
-        # a try/finally ensures the connection is closed.
         conn = sqlite3.connect(str(collection_path))
-        try:
-            conn.row_factory = sqlite3.Row
-            deck_names = _read_deck_names(conn)
-            models = _read_models(conn)
-            cards = _read_cards(conn, deck_names, models, media_map, media_url_path)
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                # Best-effort close; ignore errors during cleanup.
-                pass
-    except sqlite3.Error as exc:  # pragma: no cover - defensive programming
+    except sqlite3.Error as exc:
         raise DeckLoadError(f"Failed to open SQLite database: {exc}") from exc
+
+    try:
+        conn.row_factory = sqlite3.Row
+        deck_names = _read_deck_names(conn)
+        models = _read_models(conn)
+        cards = _read_cards(conn, deck_names, models, media_map, media_url_path)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            # Best-effort close; ignore errors during cleanup.
+            pass
 
     decks: Dict[int, Deck] = {}
     for card in cards:
@@ -914,7 +915,9 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
         ordinal = int(ordinal_raw)
         is_active = active_index is None or ordinal == active_index
 
-        content_html = html_escape(content)
+        # Keep content as-is - it's already HTML/text from Anki
+        # Don't escape to preserve formatting like <font> tags
+        content_html = content
         hint_text = (hint or "").strip()
 
         if reveal:
@@ -924,7 +927,9 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
 
         if is_active:
             if hint_text:
-                return f'<span class="cloze hint">{html_escape(hint_text)}</span>'
+                # Show hint text if provided
+                return f'<span class="cloze hint">{hint_text}</span>'
+            # Show ellipsis for blank cloze
             return '<span class="cloze blank" aria-label="hidden">[…]</span>'
 
         return content_html

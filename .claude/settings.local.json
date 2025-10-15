@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(sqlite3:*)",
+      "Bash(set ANKI_DECK_PATH=c:sharedbolarisankidataMr_Pankow_P_S Deck.apkg)",
+      "Bash($env:ANKI_DECK_PATH=\"c:\\shared\\bolaris\\anki\\data\\Mr_Pankow_P_S Deck.apkg\")",
+      "Bash(pkill:*)",
+      "Bash(pytest:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

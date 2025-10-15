@@ -8,11 +8,12 @@ cards.
 from __future__ import annotations
 
 import re
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Iterable, Optional
 
-from flask import Flask, abort, jsonify, render_template, send_from_directory
+from flask import Flask, abort, flash, jsonify, redirect, render_template, send_from_directory, url_for
 from werkzeug.exceptions import NotFound
 
 from .card_types import (
@@ -21,14 +22,13 @@ from .card_types import (
     is_image_card,
     parse_cloze_deletions,
 )
-from .deck_loader import DeckLoadError, load_collection
+from .deck_loader import DeckCollection, DeckLoadError, load_collection
 
-
-_IMAGE_SRC_PATTERN = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE)
 _DEFAULT_MEDIA_URL_PATH = "/media"
+_IMAGE_SRC_PATTERN = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE)
 
 
-def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None = None) -> Flask:
+def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None = None, data_dir: Optional[Path] = None) -> Flask:
     """Create and configure the Flask application.
 
     Parameters
@@ -39,6 +39,9 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     media_url_path:
         Optional URL prefix used when serving extracted media files. When not
         provided the default of ``/media`` is applied.
+    data_dir:
+        Optional path to directory containing .apkg files. When provided, allows
+        switching between multiple deck files.
 
     Returns
     -------
@@ -57,6 +60,8 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     """
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
+    app.secret_key = "anki_viewer_secret_key_change_in_production"
+
     configured_media_path = (
         media_url_path if media_url_path is not None else app.config.get("MEDIA_URL_PATH")
     )
@@ -65,21 +70,60 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
     media_directory = Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
     app.config["MEDIA_DIRECTORY"] = media_directory
+    app.config["DATA_DIR"] = data_dir
 
-    package_path = apkg_path or Path("data/MCAT_High_Yield.apkg")
+    # Discover available deck files
+    available_packages = []
+    if data_dir and data_dir.exists():
+        available_packages = sorted([p for p in data_dir.glob("*.apkg") if p.is_file()])
 
-    try:
-        deck_collection = load_collection(
-            package_path,
-            media_dir=media_directory,
-            media_url_path=media_url_path,
-        )
-    except DeckLoadError as exc:
-        deck_collection = None
-        app.logger.warning("Unable to load deck: %s", exc)
+    # Cache for loaded decks - keeps all decks in memory for fast switching
+    deck_cache = {}
+
+    # State for current deck - will be modified by switch_deck
+    current_state = {
+        "package_path": apkg_path or (available_packages[0] if available_packages else Path("data/MCAT_High_Yield.apkg")),
+        "deck_collection": None,
+        "media_directory": media_directory,
+    }
+
+    def _load_deck(pkg_path: Path) -> DeckCollection | None:
+        """Load a deck and update current state. Uses cache for instant switching."""
+        # Check if deck is already cached
+        cache_key = str(pkg_path)
+        if cache_key in deck_cache:
+            app.logger.info(f"Loading deck from cache: {pkg_path.name}")
+            current_state["deck_collection"] = deck_cache[cache_key]
+            current_state["package_path"] = pkg_path
+            return deck_cache[cache_key]
+
+        try:
+            app.logger.info(f"Loading deck from file: {pkg_path.name}")
+            # Clean old media directory
+            _clean_media_directory(current_state["media_directory"])
+
+            collection = load_collection(
+                pkg_path,
+                media_dir=current_state["media_directory"],
+                media_url_path=media_url_path,
+            )
+
+            # Store in cache
+            deck_cache[cache_key] = collection
+
+            current_state["deck_collection"] = collection
+            current_state["package_path"] = pkg_path
+            return collection
+        except DeckLoadError as exc:
+            app.logger.warning("Unable to load deck: %s", exc)
+            current_state["deck_collection"] = None
+            return None
+
+    # Load initial deck
+    _load_deck(current_state["package_path"])
 
     @app.context_processor
-    def inject_globals():
+    def inject_globals() -> dict:
         """Provide template helpers for rendering deck metadata.
 
         Returns
@@ -93,10 +137,12 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         True
         """
         return {
-            "deck_collection": deck_collection,
-            "missing_package": deck_collection is None,
-            "package_path": package_path,
+            "deck_collection": current_state["deck_collection"],
+            "missing_package": current_state["deck_collection"] is None,
+            "package_path": current_state["package_path"],
             "media_url_path": media_url_path,
+            "available_packages": available_packages,
+            "current_package": current_state["package_path"],
         }
 
     @app.route("/")
@@ -113,9 +159,35 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> index().status_code in {200, 404}
         True
         """
-        if deck_collection is None:
-            return render_template("missing_package.html", package_path=package_path)
-        return render_template("index.html", collection=deck_collection)
+        if current_state["deck_collection"] is None:
+            return render_template("missing_package.html", package_path=current_state["package_path"])
+        return render_template("index.html", collection=current_state["deck_collection"])
+
+    @app.route("/switch/<path:filename>")
+    def switch_deck(filename: str):
+        """Switch to a different deck file.
+
+        Parameters
+        ----------
+        filename:
+            Name of the .apkg file to load.
+
+        Returns
+        -------
+        werkzeug.wrappers.response.Response
+            Redirect to homepage.
+        """
+        if not data_dir:
+            abort(404)
+
+        target_path = data_dir / filename
+        if not target_path.exists() or target_path.suffix != '.apkg':
+            abort(404)
+
+        # Hot reload the new deck
+        _load_deck(target_path)
+        flash(f"Switched to {filename}")
+        return redirect(url_for('index'))
 
     @app.route("/deck/<int:deck_id>")
     def deck(deck_id: int):
@@ -136,14 +208,14 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> deck(0)[1] if isinstance(deck(0), tuple) else deck(0).status_code  # doctest: +SKIP
         404
         """
-        if deck_collection is None:
-            return render_template("missing_package.html", package_path=package_path), 404
+        if current_state["deck_collection"] is None:
+            return render_template("missing_package.html", package_path=current_state["package_path"]), 404
 
-        deck = deck_collection.decks.get(deck_id)
+        deck = current_state["deck_collection"].decks.get(deck_id)
         if deck is None:
             return render_template("deck_not_found.html", deck_id=deck_id), 404
 
-        return render_template("deck.html", deck=deck, collection=deck_collection)
+        return render_template("deck.html", deck=deck, collection=current_state["deck_collection"])
 
     @app.route("/deck/<int:deck_id>/card/<int:card_id>.json")
     def card_data(deck_id: int, card_id: int):
@@ -170,10 +242,10 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> card_data(1, 1).status_code  # doctest: +SKIP
         200
         """
-        if deck_collection is None:
+        if current_state["deck_collection"] is None:
             abort(404)
 
-        deck = deck_collection.decks.get(deck_id)
+        deck = current_state["deck_collection"].decks.get(deck_id)
         if deck is None:
             abort(404)
 
@@ -222,11 +294,11 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         {'cards': [...]}  # doctest: +SKIP
         """
 
-        if deck_collection is None:
+        if current_state["deck_collection"] is None:
             abort(503)
 
         cards_payload = []
-        for deck in deck_collection.decks.values():
+        for deck in current_state["deck_collection"].decks.values():
             for card in deck.cards:
                 cards_payload.append(
                     {
@@ -358,3 +430,24 @@ def _gather_image_sources(card: object, *, media_url_path: str) -> list[str]:
                 sources.add(src)
 
     return sorted(sources)
+
+
+def _clean_media_directory(media_dir: Path) -> None:
+    """Remove all files and directories from the media directory.
+
+    Parameters
+    ----------
+    media_dir:
+        Directory to clean.
+    """
+    if not media_dir.exists():
+        return
+
+    for item in media_dir.iterdir():
+        try:
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
+        except Exception:
+            pass

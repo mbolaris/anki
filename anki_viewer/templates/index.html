@@ -6,8 +6,11 @@
     {% if collection.decks %}
       <ul>
         {% for deck in collection.decks.values()|sort(attribute='name') %}
-          <li>
-            <a href="{{ url_for('deck', deck_id=deck.deck_id) }}">{{ deck.name }}</a>
+          {% set parts = deck.name.split('::') %}
+          {% set indent_level = parts|length - 1 %}
+          {% set display_name = parts[-1] if parts|length > 1 else deck.name %}
+          <li style="padding-left: {{ indent_level * 20 }}px;">
+            <a href="{{ url_for('deck', deck_id=deck.deck_id) }}">{{ display_name }}</a>
             <span class="count">{{ deck.cards|length }} cards</span>
           </li>
         {% endfor %}

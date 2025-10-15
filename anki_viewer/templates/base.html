@@ -10,6 +10,19 @@
     {% block site_header %}
       <header class="site-header">
         <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
+        {% if available_packages and available_packages|length > 1 %}
+          <div class="deck-file-selector">
+            <strong>Deck Files:</strong>
+            {% for pkg in available_packages %}
+              {% if pkg == current_package %}
+                <span class="current-deck">{{ pkg.stem }}</span>
+              {% else %}
+                <a href="{{ url_for('switch_deck', filename=pkg.name) }}" class="deck-link">{{ pkg.stem }}</a>
+              {% endif %}
+              {% if not loop.last %} | {% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
         {% if deck_collection %}
           <p class="subtitle">
             {{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Switch Deck · Anki Deck Viewer{% endblock %}
+{% block content %}
+  <section class="switch-deck">
+    <h2>Switch to {{ deck_name }}</h2>
+    <p>To switch to this deck, restart the server with:</p>
+    <pre><code>export ANKI_DECK_PATH="{{ deck_path }}" && python app.py</code></pre>
+    <p><a href="{{ url_for('index') }}">← Back to current deck</a></p>
+  </section>
+{% endblock %}
