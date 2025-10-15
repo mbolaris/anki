@@ -27,7 +27,7 @@
         <div class="card-face question" aria-labelledby="card-question-heading-{{ card.card_id }}">
           <h4 id="card-question-heading-{{ card.card_id }}" class="sr-only">Question</h4>
           {% if card.card_type == "cloze" %}
-            <p class="card-instruction cloze-instructions">Tap a highlight to reveal the hidden text.</p>
+            <p class="card-instruction cloze-instructions">Recall the hidden text for the highlighted blank.</p>
           {% elif is_image %}
             <p class="card-instruction image-instructions">Images are centered and scale to fit the card.</p>
           {% endif %}

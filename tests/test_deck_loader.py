@@ -130,23 +130,23 @@ def test_read_media_copies_manifest(tmp_path: Path, tmp_media_dir: Path) -> None
 
 def test_render_cloze_masks_and_reveals_active_index() -> None:
     html = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=False, active_index=1)
-    assert "cloze-hidden" in html
+    assert 'class="cloze blank"' in html
     assert "…" in html
     revealed = deck_loader._render_cloze("{{c1::Heart}} pumps", reveal=True, active_index=1)
-    assert "cloze-revealed" in revealed
+    assert '<mark class="cloze reveal">Heart</mark>' in revealed
     assert "Heart" in revealed
 
 
 def test_render_cloze_only_reveals_selected_deletion() -> None:
     text = "{{c1::Heart::Organ}} pumps {{c2::blood::Fluid}}"
     front = deck_loader._render_cloze(text, reveal=False, active_index=2)
-    assert front.count("cloze-hidden") == 2
+    assert front.count("cloze blank") == 2
     assert "Fluid" in front
     assert "Organ" not in front
     back = deck_loader._render_cloze(text, reveal=True, active_index=2)
     assert "blood" in back
     assert "Heart" not in back
-    assert back.count("cloze-hidden") == 1
+    assert back.count("cloze blank") == 1
 
 
 def test_render_anki_template_supports_sections() -> None:
@@ -175,7 +175,47 @@ def test_load_from_sqlite_parses_cards(tmp_path: Path, tmp_media_dir: Path) -> N
     assert cloze_card.card_type == "cloze"
     assert cloze_card.cloze_deletions == [{"num": 1, "content": "Heart"}]
     assert "{{c1" not in cloze_card.answer
-    assert "cloze-revealed" in cloze_card.answer
+    assert '<mark class="cloze reveal">Heart</mark>' in cloze_card.answer
+
+
+def test_load_from_sqlite_handles_multi_cloze_notes(tmp_path: Path, tmp_media_dir: Path) -> None:
+    db_path = tmp_path / "collection.anki21"
+    _create_sqlite_collection(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        fields_multi = deck_loader._FIELD_SEPARATOR.join(
+            [
+                "{{c1::Alpha::Larger}} or {{c2::Beta::Lower}}",
+                "",
+                "",
+            ]
+        )
+        conn.execute("INSERT INTO notes (id, flds, mid) VALUES (3, ?, 2)", (fields_multi,))
+        conn.execute("INSERT INTO cards VALUES (3, 3, 1, 0, 2)")
+        conn.execute("INSERT INTO cards VALUES (4, 3, 1, 1, 3)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    media_map = {"diagram.png": "diagram.png"}
+    collection = deck_loader._load_from_sqlite(db_path, media_map, "/media")
+    deck = collection.decks[1]
+    multi_cards = {card.card_id: card for card in deck.cards if card.note_id == 3}
+    assert set(multi_cards) == {3, 4}
+
+    first = multi_cards[3]
+    assert first.question.count("cloze blank") == 2
+    assert "Larger" in first.question
+    assert "Lower" not in first.question
+    assert '<mark class="cloze reveal">Alpha</mark>' in first.answer
+    assert "Beta" not in first.answer
+
+    second = multi_cards[4]
+    assert second.question.count("cloze blank") == 2
+    assert "Lower" in second.question
+    assert "Larger" not in second.question
+    assert '<mark class="cloze reveal">Beta</mark>' in second.answer
+    assert "Alpha" not in second.answer
 
 
 def test_load_collection_raises_for_missing_package(tmp_path: Path) -> None:
