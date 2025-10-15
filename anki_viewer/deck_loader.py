@@ -904,7 +904,7 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
     Examples
     --------
     >>> _render_cloze("{{c1::Paris}}", reveal=False, active_index=1)
-    '<span class="cloze blank">…</span>'
+    '<span class="cloze blank" aria-hidden="true"></span>'
     """
 
     if active_index is not None and active_index < 1:
@@ -918,13 +918,12 @@ def _render_cloze(html: str, *, reveal: bool, active_index: int | None = None) -
         if reveal:
             if is_active:
                 return f'<mark class="cloze reveal">{html_escape(content)}</mark>'
-            return '<span class="cloze blank">…</span>'
+            return '<span class="cloze blank" aria-hidden="true"></span>'
 
-        if is_active and hint:
-            placeholder = html_escape(hint)
-        else:
-            placeholder = "…"
-        return f'<span class="cloze blank">{placeholder}</span>'
+        hint_text = (hint or "").strip()
+        if is_active and hint_text:
+            return f'<span class="cloze hint">{html_escape(hint_text)}</span>'
+        return '<span class="cloze blank" aria-hidden="true"></span>'
 
     return _CLOZE_PATTERN.sub(replacement, html)
 

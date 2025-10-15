@@ -665,27 +665,37 @@ a {
 
 .cloze {
   display: inline-block;
-  padding: 0 0.3rem;
   line-height: 1.25;
 }
 
 .cloze.blank {
+  min-width: 2.25ch;
   border-bottom: 2px solid currentColor;
-  opacity: 0.75;
-  white-space: pre-wrap;
+  line-height: 1.2;
+  vertical-align: baseline;
+  opacity: 0.6;
+}
+
+.cloze.blank::before {
+  content: "\00a0";
+}
+
+.cloze.hint {
+  display: inline-block;
+  padding: 0 0.35rem;
+  border-radius: 0.35rem;
+  background: rgba(15, 23, 42, 0.08);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  opacity: 0.9;
 }
 
 .cloze.reveal {
-  border-radius: 0.35rem;
-  background: rgba(15, 23, 42, 0.08);
+  padding: 0 0.2rem;
+  border-radius: 0.25rem;
+  background: rgba(15, 23, 42, 0.12);
+  background: color-mix(in oklab, currentColor 18%, white 0%);
   color: inherit;
   font-weight: 600;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cloze.reveal {
-    background: rgba(248, 250, 252, 0.16);
-  }
 }
 
 .cloze-instructions {

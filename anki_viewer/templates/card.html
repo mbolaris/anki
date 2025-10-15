@@ -27,9 +27,17 @@
         <div class="card-face question" aria-labelledby="card-question-heading-{{ card.card_id }}">
           <h4 id="card-question-heading-{{ card.card_id }}" class="sr-only">Question</h4>
           {% if card.card_type == "cloze" %}
-            <p class="card-instruction cloze-instructions">Recall the hidden text for the highlighted blank.</p>
+            <p class="card-instruction cloze-instructions">
+              Pause for a beat and retrieve the hidden text before you reveal the answer.
+            </p>
           {% elif is_image %}
-            <p class="card-instruction image-instructions">Images are centered and scale to fit the card.</p>
+            <p class="card-instruction image-instructions">
+              Study the image and describe the key idea in your own words before flipping the card.
+            </p>
+          {% else %}
+            <p class="card-instruction retrieval-instructions">
+              Try to answer the prompt out loud before revealing what's on the back.
+            </p>
           {% endif %}
           <div class="content{% if card.question_revealed %} has-revealed{% endif %}">
             <div class="question-front" aria-hidden="false">{{ card.question | safe }}</div>
@@ -40,6 +48,9 @@
         </div>
         <div class="card-face answer" aria-labelledby="card-answer-heading-{{ card.card_id }}">
           <h4 id="card-answer-heading-{{ card.card_id }}" class="sr-only">Answer</h4>
+          <p class="card-instruction answer-instructions">
+            Did your response match? Summarize why this answer works to lock it in before you move on.
+          </p>
           <div class="content">{{ card.answer | safe }}</div>
         </div>
       </div>
