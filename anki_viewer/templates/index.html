@@ -4,6 +4,11 @@
   <section class="deck-list">
     <h2>Decks</h2>
     {% if collection.decks %}
+      <div class="favorites-link-container" style="margin-bottom: 1.5rem;">
+        <a href="{{ url_for('favorites') }}" class="favorites-deck-link">
+          <span class="favorites-icon">★</span> Favorites
+        </a>
+      </div>
       <div class="deck-filter">
         <span class="deck-filter__label" id="deck-filter-label">Filter decks</span>
         <div

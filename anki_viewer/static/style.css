@@ -214,6 +214,40 @@ a {
   font-style: italic;
 }
 
+.favorites-link-container {
+  margin-bottom: 1.5rem;
+}
+
+.favorites-deck-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: white;
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-decoration: none;
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.favorites-deck-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(245, 158, 11, 0.35);
+}
+
+.favorites-deck-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4), 0 12px 30px rgba(245, 158, 11, 0.35);
+}
+
+.favorites-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -303,6 +337,15 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.viewer__title--favorites {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+  filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.3));
 }
 
 .viewer__stats {
@@ -554,6 +597,7 @@ a {
   transition: opacity 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   pointer-events: none;
+  display: none;
 }
 
 .card-stage .card.is-active {
@@ -561,6 +605,7 @@ a {
   transform: translateX(0);
   pointer-events: auto;
   z-index: 2;
+  display: flex;
 }
 
 .card {
@@ -584,6 +629,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
   gap: 0.75rem;
   font-size: 0.82rem;
   color: var(--muted);
@@ -593,6 +639,100 @@ a {
   display: inline-flex;
   gap: 0.4rem;
   flex-wrap: wrap;
+}
+
+.card-rating-controls {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.rating-button {
+  appearance: none;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--muted);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  min-width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.rating-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+}
+
+.rating-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+.rating-button--favorite:hover,
+.rating-button--favorite.is-active {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: #f59e0b;
+  color: white;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
+}
+
+.rating-button--bad:hover,
+.rating-button--bad.is-active {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #dc2626;
+  color: white;
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);
+}
+
+.rating-button--memorized:hover,
+.rating-button--memorized.is-active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: #059669;
+  color: white;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.3);
+}
+
+.rating-button--clear {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rating-button--clear.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.rating-button--clear:hover {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.rating-icon {
+  display: block;
+  line-height: 1;
+}
+
+.card--rated-favorite {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 18px 40px rgba(245, 158, 11, 0.18), 0 0 0 1px rgba(245, 158, 11, 0.15);
+}
+
+.card--rated-bad {
+  border-color: rgba(220, 38, 38, 0.4);
+  box-shadow: 0 18px 40px rgba(220, 38, 38, 0.18), 0 0 0 1px rgba(220, 38, 38, 0.15);
+  opacity: 0.85;
+}
+
+.card--rated-memorized {
+  border-color: rgba(5, 150, 105, 0.4);
+  box-shadow: 0 18px 40px rgba(5, 150, 105, 0.18), 0 0 0 1px rgba(5, 150, 105, 0.15);
 }
 
 .card-header__meta {

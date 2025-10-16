@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterable, Optional
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, send_from_directory, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 from werkzeug.exceptions import NotFound
 
 from .card_types import (
@@ -23,6 +23,7 @@ from .card_types import (
     parse_cloze_deletions,
 )
 from .deck_loader import DeckCollection, DeckLoadError, load_collection
+from .ratings import RatingsStore
 
 _DEFAULT_MEDIA_URL_PATH = "/media"
 _IMAGE_SRC_PATTERN = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE)
@@ -80,9 +81,19 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     # Cache for loaded decks - keeps all decks in memory for fast switching
     deck_cache = {}
 
+    # Initialize ratings store
+    ratings_store = RatingsStore(data_dir)
+
+    # Determine default deck - prefer MCAT_Milesdown.apkg if available
+    default_deck = Path("data/MCAT_High_Yield.apkg")
+    if available_packages:
+        # Look for MCAT_Milesdown.apkg specifically
+        milesdown_deck = next((p for p in available_packages if p.name == "MCAT_Milesdown.apkg"), None)
+        default_deck = milesdown_deck if milesdown_deck else available_packages[0]
+
     # State for current deck - will be modified by switch_deck
     current_state = {
-        "package_path": apkg_path or (available_packages[0] if available_packages else Path("data/MCAT_High_Yield.apkg")),
+        "package_path": apkg_path or default_deck,
         "deck_collection": None,
         "media_directory": media_directory,
     }
@@ -243,6 +254,65 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         return render_template("deck.html", deck=deck, collection=current_state["deck_collection"])
 
+    @app.route("/favorites")
+    def favorites():
+        """Render a virtual deck containing all favorite cards from all loaded decks.
+
+        Returns
+        -------
+        werkzeug.wrappers.response.Response
+            Response containing the favorites deck view.
+        """
+        if not data_dir:
+            abort(501, description="Favorites deck requires data directory")
+
+        # Get all favorites across all decks
+        all_favorites = ratings_store.get_all_favorites()
+
+        if not all_favorites:
+            flash("No favorite cards yet! Mark some cards as favorites to see them here.")
+            return redirect(url_for('index'))
+
+        # Collect all favorited cards from all deck collections
+        favorite_cards = []
+
+        # Load all deck files to get the favorited cards
+        for pkg_path in available_packages:
+            try:
+                # Load the deck (will use cache if available)
+                collection = _load_deck(pkg_path)
+                if not collection:
+                    continue
+
+                # Get favorites for decks in this collection
+                for deck_id, deck in collection.decks.items():
+                    if deck_id not in all_favorites:
+                        continue
+
+                    favorite_card_ids = all_favorites[deck_id]
+
+                    for card in deck.cards:
+                        if str(card.card_id) in favorite_card_ids:
+                            favorite_cards.append(card)
+
+            except Exception as e:
+                app.logger.warning(f"Failed to load cards from {pkg_path}: {e}")
+                continue
+
+        if not favorite_cards:
+            flash("No favorite cards found. The favorites may be from decks that are no longer available.")
+            return redirect(url_for('index'))
+
+        # Create a synthetic Deck object for the favorites
+        from types import SimpleNamespace
+        favorites_deck = SimpleNamespace(
+            deck_id=999999,  # Special ID for favorites
+            name="Favorites",
+            cards=favorite_cards
+        )
+
+        return render_template("deck.html", deck=favorites_deck, collection=current_state["deck_collection"], is_favorites=True)
+
     @app.route("/deck/<int:deck_id>/card/<int:card_id>.json")
     def card_data(deck_id: int, card_id: int):
         """Return JSON describing an individual card.
@@ -393,6 +463,74 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
                 )
 
         return jsonify({"cards": cards_payload})
+
+    @app.route("/api/deck/<int:deck_id>/ratings")
+    def get_ratings(deck_id: int):
+        """Get all card ratings for a specific deck.
+
+        Parameters
+        ----------
+        deck_id:
+            Identifier of the deck.
+
+        Returns
+        -------
+        flask.Response
+            JSON payload with ratings mapping (card_id -> rating).
+        """
+        if not data_dir:
+            abort(501, description="Ratings storage not configured")
+
+        ratings = ratings_store.load(deck_id)
+        return jsonify({"ratings": ratings})
+
+    @app.route("/api/card/<int:card_id>/rating", methods=["POST"])
+    def set_rating(card_id: int):
+        """Set or clear a rating for a specific card.
+
+        Parameters
+        ----------
+        card_id:
+            Identifier of the card.
+
+        Request Body
+        ------------
+        JSON with:
+            - deck_id: int - The deck containing the card
+            - rating: str - "favorite", "bad", or "" to clear
+
+        Returns
+        -------
+        flask.Response
+            JSON payload with success status.
+        """
+        if not data_dir:
+            abort(501, description="Ratings storage not configured")
+
+        data = request.get_json() or {}
+        deck_id = data.get("deck_id")
+        rating = data.get("rating", "")
+
+        if not deck_id:
+            abort(400, description="deck_id is required")
+
+        if rating not in ["favorite", "bad", "memorized", ""]:
+            abort(400, description="rating must be 'favorite', 'bad', 'memorized', or empty string")
+
+        # Load existing ratings
+        ratings = ratings_store.load(deck_id)
+
+        # Update or remove rating
+        card_id_str = str(card_id)
+        if rating:
+            ratings[card_id_str] = rating
+        else:
+            ratings.pop(card_id_str, None)
+
+        # Save back
+        ratings_store.save(deck_id, ratings)
+
+        return jsonify({"success": True, "card_id": card_id, "rating": rating})
 
     media_route_prefix = media_url_path or _DEFAULT_MEDIA_URL_PATH
 

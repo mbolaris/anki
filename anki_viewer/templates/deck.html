@@ -19,7 +19,7 @@
             ← Decks
           </a>
           <span class="viewer__separator" aria-hidden="true">/</span>
-          <h2 class="viewer__title">{{ deck.name }}</h2>
+          <h2 class="viewer__title{% if is_favorites %} viewer__title--favorites{% endif %}">{{ deck.name }}</h2>
         </div>
         <div class="viewer__stats">
           <p class="viewer__counter" data-role="counter" data-state="{% if deck.cards %}active{% else %}empty{% endif %}" aria-live="polite">
@@ -70,6 +70,10 @@
             <span class="toolbar-button__icon" aria-hidden="true">✓</span>
             <span class="toolbar-button__label">Known</span>
             <span class="toolbar-button__hint" aria-hidden="true">K</span>
+          </button>
+          <button type="button" class="toolbar-button" data-action="toggle-hide-memorized" title="Hide memorized cards" aria-pressed="false">
+            <span class="toolbar-button__icon" aria-hidden="true">👁</span>
+            <span class="toolbar-button__label">Show Memorized</span>
           </button>
           <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
             <span class="toolbar-button__icon" aria-hidden="true">↺</span>

@@ -111,9 +111,11 @@
 
     const viewedKey = `deck-${deckId}-viewed`;
     const knownKey = `deck-${deckId}-known`;
+    const ratingsKey = `deck-${deckId}-ratings`;
 
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
+    const ratingsMap = new Map();
 
     function setupCardMedia(card) {
       if (!card || card.dataset.mediaSetup === "true") {
@@ -168,6 +170,7 @@
     let activeCardIds = [];
     let currentIndex = -1;
     let isShuffled = false;
+    let hideMemorized = true;
 
     const keyToAction = new Map([
       [" ", "flip"],
@@ -181,6 +184,10 @@
       ["K", "mark-known"],
       ["d", "toggle-debug"],
       ["D", "toggle-debug"],
+      ["1", "set-rating-favorite"],
+      ["2", "set-rating-bad"],
+      ["3", "set-rating-memorized"],
+      ["0", "clear-rating"],
     ]);
 
     function persistViewed() {
@@ -189,6 +196,132 @@
 
     function persistKnown() {
       writeSet(knownKey, knownSet);
+    }
+
+    function loadRatings() {
+      const raw = readFromStorage(ratingsKey);
+      if (!raw) {
+        return;
+      }
+      try {
+        const obj = JSON.parse(raw);
+        ratingsMap.clear();
+        Object.entries(obj).forEach(([id, rating]) => {
+          ratingsMap.set(id, rating);
+        });
+      } catch (error) {
+        console.warn("Unable to parse ratings data", error);
+      }
+    }
+
+    function persistRatings() {
+      const obj = {};
+      for (const [id, rating] of ratingsMap.entries()) {
+        obj[id] = rating;
+      }
+      writeToStorage(ratingsKey, JSON.stringify(obj));
+    }
+
+    async function saveRatingToServer(cardId, rating) {
+      try {
+        const response = await fetch(`/api/card/${cardId}/rating`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            deck_id: Number.parseInt(deckId, 10),
+            rating: rating || "",
+          }),
+        });
+        if (!response.ok) {
+          console.error("Failed to save rating to server:", response.statusText);
+        }
+      } catch (error) {
+        console.error("Failed to save rating to server:", error);
+      }
+    }
+
+    async function setCardRating(cardId, rating) {
+      if (rating && !["favorite", "bad", "memorized"].includes(rating)) {
+        return;
+      }
+
+      if (rating) {
+        ratingsMap.set(cardId, rating);
+      } else {
+        ratingsMap.delete(cardId);
+      }
+
+      persistRatings();
+      updateCardRatingUI(cardId);
+      await saveRatingToServer(cardId, rating);
+    }
+
+    function updateCardRatingUI(cardId) {
+      const card = cardById.get(cardId);
+      if (!card) {
+        return;
+      }
+
+      const rating = ratingsMap.get(cardId);
+
+      // Update card class
+      card.classList.remove("card--rated-favorite", "card--rated-bad", "card--rated-memorized");
+      if (rating === "favorite") {
+        card.classList.add("card--rated-favorite");
+      } else if (rating === "bad") {
+        card.classList.add("card--rated-bad");
+      } else if (rating === "memorized") {
+        card.classList.add("card--rated-memorized");
+      }
+
+      // Update button states
+      const buttons = card.querySelectorAll(".rating-button");
+      buttons.forEach((button) => {
+        const buttonRating = button.getAttribute("data-rating");
+        if (buttonRating === rating) {
+          button.classList.add("is-active");
+          button.setAttribute("aria-pressed", "true");
+        } else {
+          button.classList.remove("is-active");
+          button.setAttribute("aria-pressed", "false");
+        }
+      });
+
+      const clearButton = card.querySelector('[data-action="clear-rating"]');
+      if (clearButton) {
+        if (rating) {
+          clearButton.classList.add("is-visible");
+        } else {
+          clearButton.classList.remove("is-visible");
+        }
+      }
+    }
+
+    async function loadRatingsFromServer() {
+      try {
+        const response = await fetch(`/api/deck/${deckId}/ratings`);
+        if (!response.ok) {
+          console.warn("Failed to load ratings from server:", response.statusText);
+          return;
+        }
+        const data = await response.json();
+        if (data.ratings) {
+          ratingsMap.clear();
+          Object.entries(data.ratings).forEach(([cardId, rating]) => {
+            ratingsMap.set(cardId, rating);
+          });
+          persistRatings();
+
+          // Update UI for all rated cards
+          for (const [cardId] of ratingsMap.entries()) {
+            updateCardRatingUI(cardId);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to load ratings from server:", error);
+      }
     }
 
     function markViewed(cardId) {
@@ -351,12 +484,38 @@
       }
     }
 
+    function updateHideMemorizedButton() {
+      const button = viewer.querySelector('[data-action="toggle-hide-memorized"]');
+      if (!button) {
+        return;
+      }
+      button.setAttribute("aria-pressed", hideMemorized ? "true" : "false");
+      button.setAttribute(
+        "title",
+        hideMemorized ? "Show memorized cards" : "Hide memorized cards"
+      );
+      const label = button.querySelector(".toolbar-button__label");
+      if (label) {
+        label.textContent = hideMemorized ? "Show Memorized" : "Hide Memorized";
+      }
+    }
+
+    function toggleHideMemorized() {
+      const activeCard = getActiveCardElement();
+      const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
+      hideMemorized = !hideMemorized;
+      updateHideMemorizedButton();
+      rebuildActiveCardIds(preserveCardId);
+      showCardByIndex(currentIndex);
+    }
+
     function rebuildActiveCardIds(preserveCardId) {
       const available = baseOrder.filter((cardId) => {
         if (!cardId) {
           return false;
         }
         const isKnown = knownSet.has(cardId);
+        const isMemorized = hideMemorized && ratingsMap.get(cardId) === "memorized";
         const card = cardById.get(cardId);
         if (card) {
           card.classList.toggle("is-known", isKnown);
@@ -365,7 +524,7 @@
             updateQuestionVisibility(card);
           }
         }
-        return !isKnown;
+        return !isKnown && !isMemorized;
       });
 
       activeCardIds = isShuffled ? shuffleArray(available) : available;
@@ -646,6 +805,9 @@
         case "toggle-shuffle":
           toggleShuffle();
           break;
+        case "toggle-hide-memorized":
+          toggleHideMemorized();
+          break;
         case "mark-known":
           markCurrentCardKnown();
           break;
@@ -664,6 +826,34 @@
         case "toggle-debug":
           toggleDebug();
           break;
+        case "set-rating-favorite": {
+          const card = getActiveCardElement();
+          if (card) {
+            setCardRating(card.dataset.cardId, "favorite");
+          }
+          break;
+        }
+        case "set-rating-bad": {
+          const card = getActiveCardElement();
+          if (card) {
+            setCardRating(card.dataset.cardId, "bad");
+          }
+          break;
+        }
+        case "set-rating-memorized": {
+          const card = getActiveCardElement();
+          if (card) {
+            setCardRating(card.dataset.cardId, "memorized");
+          }
+          break;
+        }
+        case "clear-rating": {
+          const card = getActiveCardElement();
+          if (card) {
+            setCardRating(card.dataset.cardId, "");
+          }
+          break;
+        }
         default:
           break;
       }
@@ -685,6 +875,19 @@
         const cardId = target.getAttribute("data-card-id");
         if (deckId && cardId) {
           fetchCardData(deckId, cardId);
+        }
+      } else if (action === "set-rating") {
+        event.preventDefault();
+        const rating = target.getAttribute("data-rating");
+        const card = target.closest(".card");
+        if (card && rating) {
+          setCardRating(card.dataset.cardId, rating);
+        }
+      } else if (action === "clear-rating") {
+        event.preventDefault();
+        const card = target.closest(".card");
+        if (card) {
+          setCardRating(card.dataset.cardId, "");
         }
       } else if (action) {
         event.preventDefault();
@@ -785,11 +988,16 @@
     });
 
     updateShuffleButton();
+    updateHideMemorizedButton();
     rebuildActiveCardIds();
     syncFullscreenFromDocument();
 
     // Initialize the UI
     updateProgress();
     showCardByIndex(currentIndex);
+
+    // Load ratings from localStorage and server
+    loadRatings();
+    loadRatingsFromServer();
   });
 })();
