@@ -395,6 +395,7 @@
         } else {
           activeCard = card;
         }
+        card.hidden = !isActive;
         updateQuestionVisibility(card);
       });
       if (cardId) {
@@ -606,6 +607,7 @@
         currentIndex = -1;
         cardElements.forEach((card) => {
           card.classList.remove("is-active", "revealed");
+          card.hidden = true;
           updateQuestionVisibility(card);
         });
         updateCardTypeIndicator(null);
