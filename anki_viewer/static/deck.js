@@ -200,17 +200,23 @@
 
     function loadRatings() {
       const raw = readFromStorage(ratingsKey);
+      ratingsMap.clear();
       if (!raw) {
         return;
       }
       try {
         const obj = JSON.parse(raw);
-        ratingsMap.clear();
         Object.entries(obj).forEach(([id, rating]) => {
-          ratingsMap.set(id, rating);
+          if (rating && ["favorite", "bad", "memorized"].includes(rating)) {
+            ratingsMap.set(id, rating);
+          }
         });
       } catch (error) {
         console.warn("Unable to parse ratings data", error);
+      }
+
+      for (const [cardId] of ratingsMap.entries()) {
+        updateCardRatingUI(cardId);
       }
     }
 
@@ -255,6 +261,7 @@
 
       persistRatings();
       updateCardRatingUI(cardId);
+      refreshActiveCards(cardId);
       await saveRatingToServer(cardId, rating);
     }
 
@@ -310,7 +317,9 @@
         if (data.ratings) {
           ratingsMap.clear();
           Object.entries(data.ratings).forEach(([cardId, rating]) => {
-            ratingsMap.set(cardId, rating);
+            if (rating && ["favorite", "bad", "memorized"].includes(rating)) {
+              ratingsMap.set(cardId, rating);
+            }
           });
           persistRatings();
 
@@ -318,6 +327,9 @@
           for (const [cardId] of ratingsMap.entries()) {
             updateCardRatingUI(cardId);
           }
+          const activeCard = getActiveCardElement();
+          const preserveId = activeCard ? activeCard.dataset.cardId : undefined;
+          refreshActiveCards(preserveId);
         }
       } catch (error) {
         console.warn("Failed to load ratings from server:", error);
@@ -506,8 +518,7 @@
       const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
       hideMemorized = !hideMemorized;
       updateHideMemorizedButton();
-      rebuildActiveCardIds(preserveCardId);
-      showCardByIndex(currentIndex);
+      refreshActiveCards(preserveCardId);
     }
 
     function rebuildActiveCardIds(preserveCardId) {
@@ -534,18 +545,20 @@
         currentIndex = activeCardIds.indexOf(preserveCardId);
       } else if (activeCardIds.length === 0) {
         currentIndex = -1;
-      } else {
-        if (currentIndex < 0 || currentIndex >= activeCardIds.length) {
-          currentIndex = 0;
-        }
+      } else if (currentIndex < 0 || currentIndex >= activeCardIds.length) {
+        currentIndex = 0;
       }
+    }
+
+    function refreshActiveCards(preserveCardId) {
+      rebuildActiveCardIds(preserveCardId);
+      showCardByIndex(currentIndex);
     }
 
     function setShuffleState(shuffled, preserveCardId) {
       isShuffled = Boolean(shuffled);
       updateShuffleButton();
-      rebuildActiveCardIds(preserveCardId);
-      showCardByIndex(currentIndex);
+      refreshActiveCards(preserveCardId);
     }
 
     function toggleShuffle() {
@@ -693,8 +706,8 @@
       updateProgress();
       isShuffled = false;
       updateShuffleButton();
-      rebuildActiveCardIds();
-      showCardByIndex(0);
+      currentIndex = 0;
+      refreshActiveCards();
     }
 
     function isHelpOpen() {
@@ -1061,17 +1074,16 @@
       });
     }
 
+    loadRatings();
     updateShuffleButton();
     updateHideMemorizedButton();
-    rebuildActiveCardIds();
+    refreshActiveCards();
     syncFullscreenFromDocument();
 
     // Initialize the UI
     updateProgress();
-    showCardByIndex(currentIndex);
 
-    // Load ratings from localStorage and server
-    loadRatings();
+    // Load ratings from the server to sync with backend state
     loadRatingsFromServer();
   });
 })();
