@@ -98,8 +98,17 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         "media_directory": media_directory,
     }
 
-    def _load_deck(pkg_path: Path) -> DeckCollection | None:
-        """Load a deck and update current state. Uses cache for instant switching."""
+    def _load_deck(pkg_path: Path, clean_media: bool = True) -> DeckCollection | None:
+        """Load a deck and update current state. Uses cache for instant switching.
+
+        Parameters
+        ----------
+        pkg_path:
+            Path to the .apkg file to load.
+        clean_media:
+            If True, clean the media directory before loading. Set to False when
+            loading multiple decks (e.g., for favorites) to preserve media files.
+        """
         # Check if deck is already cached
         cache_key = str(pkg_path)
         if cache_key in deck_cache:
@@ -110,8 +119,9 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         try:
             app.logger.info(f"Loading deck from file: {pkg_path.name}")
-            # Clean old media directory
-            _clean_media_directory(current_state["media_directory"])
+            # Only clean media directory if requested (don't clean when loading for favorites)
+            if clean_media:
+                _clean_media_directory(current_state["media_directory"])
 
             collection = load_collection(
                 pkg_path,
@@ -276,11 +286,15 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         # Collect all favorited cards from all deck collections
         favorite_cards = []
 
+        # First, clean the media directory once before loading all decks
+        _clean_media_directory(current_state["media_directory"])
+
         # Load all deck files to get the favorited cards
+        # Use clean_media=False to preserve media from all decks
         for pkg_path in available_packages:
             try:
-                # Load the deck (will use cache if available)
-                collection = _load_deck(pkg_path)
+                # Load the deck without cleaning media (accumulate media from all decks)
+                collection = _load_deck(pkg_path, clean_media=False)
                 if not collection:
                     continue
 

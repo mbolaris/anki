@@ -987,6 +987,78 @@
       syncFullscreenFromDocument();
     });
 
+    // Swipe gesture support for mobile navigation
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    const swipeThreshold = 50; // Minimum distance for a swipe
+    const swipeAngleThreshold = 30; // Maximum angle deviation from horizontal (in degrees)
+
+    if (cardStage) {
+      cardStage.addEventListener("touchstart", (event) => {
+        if (event.touches.length !== 1) {
+          return;
+        }
+        const touch = event.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+      }, { passive: true });
+
+      cardStage.addEventListener("touchmove", (event) => {
+        if (event.touches.length !== 1) {
+          return;
+        }
+        const touch = event.touches[0];
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      cardStage.addEventListener("touchend", (event) => {
+        if (isHelpOpen()) {
+          return;
+        }
+
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+        const absDeltaX = Math.abs(deltaX);
+        const absDeltaY = Math.abs(deltaY);
+
+        // Check if the swipe distance meets threshold
+        if (absDeltaX < swipeThreshold && absDeltaY < swipeThreshold) {
+          return;
+        }
+
+        // Calculate angle to ensure it's mostly horizontal
+        const angle = Math.abs(Math.atan2(deltaY, deltaX) * 180 / Math.PI);
+        const isHorizontal = angle < swipeAngleThreshold || angle > (180 - swipeAngleThreshold);
+
+        if (!isHorizontal) {
+          return;
+        }
+
+        // Determine swipe direction
+        if (absDeltaX > absDeltaY) {
+          if (deltaX > 0) {
+            // Swipe right - go to previous card
+            performAction("prev");
+            flashControl("prev");
+          } else {
+            // Swipe left - go to next card
+            performAction("next");
+            flashControl("next");
+          }
+          event.preventDefault();
+        }
+
+        // Reset touch coordinates
+        touchStartX = 0;
+        touchStartY = 0;
+        touchEndX = 0;
+        touchEndY = 0;
+      });
+    }
+
     updateShuffleButton();
     updateHideMemorizedButton();
     rebuildActiveCardIds();
