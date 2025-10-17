@@ -397,6 +397,8 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         if card is None:
             abort(404)
 
+        image_sources = _gather_image_sources(card, media_url_path=media_url_path)
+
         payload = {
             "id": card.card_id,
             "type": card.card_type,
@@ -412,67 +414,16 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
                 {"num": deletion.get("num"), "content": deletion.get("content")}
                 for deletion in card.cloze_deletions
             ]
-        elif card.card_type == "image":
-            image_sources = _gather_image_sources(card, media_url_path=media_url_path)
-            if image_sources:
-                payload["images"] = image_sources
+        elif card.card_type == "image" and image_sources:
+            payload["images"] = image_sources
 
-        # Add debug information
-        payload["debug"] = {
-            "note_id": card.note_id,
-            "deck_id": card.deck_id,
-            "deck_name": card.deck_name,
-            "template_ordinal": card.template_ordinal,
-            "raw_question": card.raw_question,
-            "cloze_deletions": card.cloze_deletions,
-            "question_html_length": len(card.question) if card.question else 0,
-            "answer_html_length": len(card.answer) if card.answer else 0,
-            "has_question_revealed": card.question_revealed is not None,
-            "extra_fields_count": len(card.extra_fields) if card.extra_fields else 0,
-        }
-
-        # Add image debugging info for ALL cards (not just image type)
-        all_image_sources = _gather_image_sources(card, media_url_path=media_url_path)
-        if all_image_sources or card.card_type == "image":
-            payload["debug"]["image_sources_found"] = all_image_sources
-            payload["debug"]["media_url_path"] = media_url_path
-            payload["debug"]["media_directory"] = str(current_state["media_directory"]) if current_state["media_directory"] else None
-
-            # Check which images actually exist
-            media_dir = current_state["media_directory"]
-            if media_dir and media_dir.exists():
-                image_status = {}
-                for img_src in all_image_sources:
-                    # Extract filename from URL (e.g., /media/Formyl_Group_1.png -> Formyl_Group_1.png)
-                    filename = img_src.split('/')[-1] if '/' in img_src else img_src
-                    file_path = media_dir / filename
-                    image_status[img_src] = {
-                        "filename": filename,
-                        "exists_on_disk": file_path.exists(),
-                        "full_path": str(file_path) if file_path.exists() else None,
-                    }
-                payload["debug"]["image_file_status"] = image_status
-
-            # Show sample of available media files
-            if current_state["deck_collection"]:
-                payload["debug"]["available_media_files_sample"] = list(current_state["deck_collection"].media_filenames.keys())[:10]
-                payload["debug"]["total_media_files"] = len(current_state["deck_collection"].media_filenames)
-
-                # Search for similar filenames for missing images
-                similar_files = {}
-                for img_src in all_image_sources:
-                    filename = img_src.split('/')[-1] if '/' in img_src else img_src
-                    # Remove extension and underscores for fuzzy matching
-                    base_name = filename.rsplit('.', 1)[0].lower().replace('_', ' ').replace('-', ' ')
-                    matches = []
-                    for media_file in current_state["deck_collection"].media_filenames.keys():
-                        media_base = media_file.rsplit('.', 1)[0].lower().replace('_', ' ').replace('-', ' ')
-                        if base_name in media_base or media_base in base_name:
-                            matches.append(media_file)
-                    if matches:
-                        similar_files[filename] = matches[:5]  # Limit to 5 matches
-                if similar_files:
-                    payload["debug"]["similar_media_files"] = similar_files
+        payload["debug"] = _build_card_debug_payload(
+            card,
+            image_sources=image_sources,
+            media_url_path=media_url_path,
+            media_directory=current_state["media_directory"],
+            deck_collection=current_state["deck_collection"],
+        )
 
         return jsonify(payload)
 
@@ -775,6 +726,111 @@ def _gather_image_sources(card: object, *, media_url_path: str) -> list[str]:
                 sources.add(src)
 
     return sorted(sources)
+
+
+def _build_card_debug_payload(
+    card: object,
+    *,
+    image_sources: Iterable[str],
+    media_url_path: str,
+    media_directory: Path | None,
+    deck_collection: DeckCollection | None,
+) -> dict[str, object]:
+    """Return diagnostic metadata describing *card* and its media assets."""
+
+    debug: dict[str, object] = {
+        "note_id": getattr(card, "note_id", None),
+        "deck_id": getattr(card, "deck_id", None),
+        "deck_name": getattr(card, "deck_name", None),
+        "template_ordinal": getattr(card, "template_ordinal", None),
+        "raw_question": getattr(card, "raw_question", None),
+        "cloze_deletions": getattr(card, "cloze_deletions", []),
+        "question_html_length": len(getattr(card, "question", "") or ""),
+        "answer_html_length": len(getattr(card, "answer", "") or ""),
+        "has_question_revealed": getattr(card, "question_revealed", None) is not None,
+        "extra_fields_count": len(getattr(card, "extra_fields", []) or []),
+    }
+
+    card_type = getattr(card, "card_type", None)
+    sources_list = list(image_sources)
+    if not sources_list and card_type != "image":
+        return debug
+
+    debug["image_sources_found"] = sources_list
+    debug["media_url_path"] = media_url_path
+    debug["media_directory"] = str(media_directory) if media_directory else None
+
+    if media_directory and media_directory.exists():
+        debug["image_file_status"] = _describe_image_files(media_directory, sources_list)
+
+    if deck_collection and deck_collection.media_filenames:
+        media_filenames = deck_collection.media_filenames
+        debug["available_media_files_sample"] = list(media_filenames.keys())[:10]
+        debug["total_media_files"] = len(media_filenames)
+
+        similar = _find_similar_media_files(sources_list, media_filenames.keys())
+        if similar:
+            debug["similar_media_files"] = similar
+
+    return debug
+
+
+def _describe_image_files(media_dir: Path, image_sources: Iterable[str]) -> dict[str, dict[str, object]]:
+    """Return on-disk metadata for the images referenced in *image_sources*."""
+
+    status: dict[str, dict[str, object]] = {}
+    for src in image_sources:
+        filename = _extract_filename(src)
+        file_path = media_dir / filename
+        exists = file_path.exists()
+        status[src] = {
+            "filename": filename,
+            "exists_on_disk": exists,
+            "full_path": str(file_path) if exists else None,
+        }
+    return status
+
+
+def _find_similar_media_files(
+    image_sources: Iterable[str],
+    media_filenames: Iterable[str],
+) -> dict[str, list[str]]:
+    """Suggest filenames from *media_filenames* that closely match image references."""
+
+    normalised_media = [
+        (filename, _normalise_filename(filename))
+        for filename in media_filenames
+    ]
+
+    suggestions: dict[str, list[str]] = {}
+    for src in image_sources:
+        filename = _extract_filename(src)
+        base_name = _normalise_filename(filename)
+        matches = [
+            original
+            for original, normalised in normalised_media
+            if base_name in normalised or normalised in base_name
+        ]
+        if matches:
+            suggestions[filename] = matches[:5]
+    return suggestions
+
+
+def _extract_filename(path: str) -> str:
+    """Return the basename component of *path* regardless of separator used."""
+
+    if "/" in path:
+        return path.rsplit("/", 1)[-1]
+    if "\\" in path:
+        return path.rsplit("\\", 1)[-1]
+    return path
+
+
+def _normalise_filename(filename: str) -> str:
+    """Return a simplified representation of *filename* for comparison."""
+
+    stem = filename.rsplit(".", 1)[0]
+    return stem.lower().replace("_", " ").replace("-", " ")
 
 
 def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCollection | None, ttl: float | None = None) -> tuple[str | None, str | None]:
