@@ -8,7 +8,6 @@ import sqlite3
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Dict, List
 from urllib.parse import unquote
 from zipfile import ZipFile
@@ -103,6 +102,42 @@ class DeckCollection:
         if not base:
             return stored
         return f"{base}/{stored}"
+
+
+@dataclass(frozen=True)
+class _CardRow:
+    """Lightweight representation of a row fetched from the cards query."""
+
+    card_id: int
+    note_id: int
+    deck_id: int
+    template_index: int
+    model_id: int | None
+    fields: List[str]
+
+    @classmethod
+    def from_sqlite(cls, row: sqlite3.Row) -> "_CardRow":
+        raw_fields = row["note_fields"] or ""
+        fields = raw_fields.split(_FIELD_SEPARATOR) if raw_fields else []
+        model_id = row["model_id"]
+        return cls(
+            card_id=int(row["card_id"]),
+            note_id=int(row["note_id"]),
+            deck_id=int(row["deck_id"]),
+            template_index=int(row["template_ordinal"]),
+            model_id=int(model_id) if model_id is not None else None,
+            fields=fields,
+        )
+
+
+@dataclass(frozen=True)
+class _CardPreview:
+    """Minimal card-like object used for type detection."""
+
+    question: str
+    answer: str
+    extra_fields: List[str]
+    question_revealed: str | None
 
 
 @dataclass(frozen=True)
@@ -464,87 +499,137 @@ def _read_cards(
         JOIN notes ON notes.id = cards.nid
         ORDER BY cards.did, cards.due, cards.id
     """
-    rows = conn.execute(query).fetchall()
-    cards: List[Card] = []
-    for row in rows:
-        fields = row["note_fields"].split(_FIELD_SEPARATOR)
-        model_id = int(row["model_id"]) if row["model_id"] is not None else None
-        model = models.get(model_id) if model_id is not None else None
+    rows = (_CardRow.from_sqlite(row) for row in conn.execute(query))
+    return [
+        _build_card(row, deck_names, models, media_map, media_url_path)
+        for row in rows
+    ]
 
-        template_index = int(row["template_ordinal"])
-        render_template_index = template_index
-        field_map = _build_field_map(fields, model.fields if model else [])
 
-        if model and model.templates:
-            if not 0 <= render_template_index < len(model.templates):
-                render_template_index = render_template_index % len(model.templates)
-            template = model.templates[render_template_index]
-            question_source = _render_anki_template(template.question_format, field_map)
-            answer_context = dict(field_map)
-            answer_context.setdefault("FrontSide", question_source)
-            answer_source = _render_anki_template(template.answer_format, answer_context)
-        else:
-            question_source = fields[0] if fields else ""
-            answer_source = fields[1] if len(fields) > 1 else ""
+def _build_card(
+    row: _CardRow,
+    deck_names: Dict[int, str],
+    models: Dict[int, NoteModel],
+    media_map: Dict[str, str],
+    media_url_path: str,
+) -> Card:
+    """Return a fully populated :class:`Card` for the provided ``_CardRow``."""
 
-        question = _inline_media(question_source, media_map, media_url_path)
-        answer = _inline_media(answer_source, media_map, media_url_path)
-        extra_values = fields[2:] if len(fields) > 2 else []
-        extra = [_inline_media(value, media_map, media_url_path) for value in extra_values]
+    model = models.get(row.model_id) if row.model_id is not None else None
+    field_map = _build_field_map(row.fields, model.fields if model else [])
 
-        card_preview = SimpleNamespace(
-            question=question,
-            answer=answer,
-            extra_fields=extra,
-            question_revealed=None,
+    render_index, question_source, answer_source = _render_note_templates(
+        model, row.template_index, field_map, row.fields
+    )
+
+    question = _inline_media(question_source, media_map, media_url_path)
+    answer = _inline_media(answer_source, media_map, media_url_path)
+    extras = [
+        _inline_media(value, media_map, media_url_path)
+        for value in row.fields[2:]
+    ]
+
+    preview = _CardPreview(
+        question=question,
+        answer=answer,
+        extra_fields=extras,
+        question_revealed=None,
+    )
+    card_type = detect_card_type(preview)
+
+    (
+        question,
+        answer,
+        question_revealed,
+        raw_question,
+        cloze_deletions,
+    ) = _finalize_card_content(card_type, question, answer, row.template_index)
+
+    deck_name = deck_names.get(row.deck_id, str(row.deck_id))
+    return Card(
+        card_id=row.card_id,
+        note_id=row.note_id,
+        deck_id=row.deck_id,
+        deck_name=deck_name,
+        template_ordinal=render_index,
+        question=question,
+        answer=answer,
+        card_type=card_type,
+        extra_fields=extras,
+        question_revealed=question_revealed,
+        raw_question=raw_question,
+        cloze_deletions=cloze_deletions,
+    )
+
+
+def _render_note_templates(
+    model: NoteModel | None,
+    template_index: int,
+    field_map: Dict[str, str],
+    fields: List[str],
+) -> tuple[int, str, str]:
+    """Render the question and answer template for a given card."""
+
+    if model and model.templates:
+        index = template_index % len(model.templates)
+        template = model.templates[index]
+        question_source = _render_anki_template(template.question_format, field_map)
+        answer_context = dict(field_map)
+        answer_context.setdefault("FrontSide", question_source)
+        answer_source = _render_anki_template(template.answer_format, answer_context)
+        return index, question_source, answer_source
+
+    question_source = fields[0] if fields else ""
+    answer_source = fields[1] if len(fields) > 1 else ""
+    return template_index, question_source, answer_source
+
+
+def _finalize_card_content(
+    card_type: str,
+    question: str,
+    answer: str,
+    template_index: int,
+) -> tuple[str, str, str | None, str, List[Dict[str, object]]]:
+    """Apply card-type specific post-processing such as cloze rendering."""
+
+    raw_question = question
+    question_revealed: str | None = None
+    cloze_deletions: List[Dict[str, object]] = []
+
+    if card_type == "cloze" and _CLOZE_PATTERN.search(question):
+        cloze_deletions = parse_cloze_deletions(question)
+        active_index = template_index + 1
+        rendered_question = _render_cloze(
+            question,
+            reveal=False,
+            active_index=active_index,
         )
-        card_type = detect_card_type(card_preview)
-
-        original_question = question
-        active_cloze_index = None
-        cloze_deletions: List[Dict[str, object]] = []
-        question_revealed = None
-        if card_type == "cloze" and _CLOZE_PATTERN.search(question):
-            cloze_deletions = parse_cloze_deletions(question)
-            active_cloze_index = template_index + 1
-            rendered_question = _render_cloze(
-                question,
-                reveal=False,
-                active_index=active_cloze_index,
-            )
-            rendered_answer = _render_cloze(
-                question,
-                reveal=True,
-                active_index=active_cloze_index,
-            )
-            extra_answer = ""
-            if answer.strip():
-                without_question = answer.replace(original_question, "", 1)
-                if without_question != answer:
-                    extra_answer = without_question.strip()
-            if extra_answer:
-                rendered_answer = f"{rendered_answer}{extra_answer}"
-            question, answer = rendered_question, rendered_answer
-            question_revealed = rendered_answer
-        deck_id = int(row["deck_id"])
-        deck_name = deck_names.get(deck_id, str(deck_id))
-        cards.append(
-            Card(
-                card_id=int(row["card_id"]),
-                note_id=int(row["note_id"]),
-                deck_id=deck_id,
-                deck_name=deck_name,
-                template_ordinal=render_template_index,
-                question=question,
-                answer=answer,
-                card_type=card_type,
-                extra_fields=extra,
-                question_revealed=question_revealed,
-                raw_question=original_question,
-                cloze_deletions=cloze_deletions,
-            )
+        rendered_answer = _render_cloze(
+            question,
+            reveal=True,
+            active_index=active_index,
         )
-    return cards
+        extra_answer = _extract_additional_answer(raw_question, answer)
+        if extra_answer:
+            rendered_answer = f"{rendered_answer}{extra_answer}"
+        question = rendered_question
+        answer = rendered_answer
+        question_revealed = rendered_answer
+
+    return question, answer, question_revealed, raw_question, cloze_deletions
+
+
+def _extract_additional_answer(original_question: str, answer: str) -> str:
+    """Return the trailing portion of *answer* that is not part of the question."""
+
+    if not answer.strip():
+        return ""
+
+    without_question = answer.replace(original_question, "", 1)
+    if without_question == answer:
+        return ""
+
+    return without_question.strip()
 
 
 def _build_field_map(values: List[str], field_names: List[str]) -> Dict[str, str]:
