@@ -700,32 +700,18 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
     if not html or not media_map:
         return html
 
+    def resolve_media_reference(source: str) -> str | None:
+        """Return the stored filename for *source* when available."""
+
+        normalized = Path(unquote(source)).name
+        if not normalized:
+            return None
+
+        return _lookup_media_reference(media_map, normalized)
+
     def replacement(match: re.Match[str]) -> str:
         prefix, quote, src = match.groups()
-        normalized = unquote(src)
-        filename = Path(normalized).name
-        data_uri = media_map.get(filename)
-        if not data_uri:
-            stem = Path(filename).stem
-            if stem and stem in media_map:
-                data_uri = media_map[stem]
-        if not data_uri:
-            # Try case-insensitive lookup
-            filename_lower = filename.lower()
-            for key, value in media_map.items():
-                if key.lower() == filename_lower:
-                    data_uri = value
-                    break
-        if not data_uri:
-            # Try without extension
-            stem = Path(filename).stem
-            if stem:
-                stem_lower = stem.lower()
-                for key, value in media_map.items():
-                    key_stem = Path(key).stem
-                    if key_stem.lower() == stem_lower:
-                        data_uri = value
-                        break
+        data_uri = resolve_media_reference(src)
         if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)
@@ -735,36 +721,36 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
 
     def unquoted_replacement(match: re.Match[str]) -> str:
         prefix, src = match.groups()
-        normalized = unquote(src)
-        filename = Path(normalized).name
-        data_uri = media_map.get(filename)
-        if not data_uri:
-            stem = Path(filename).stem
-            if stem and stem in media_map:
-                data_uri = media_map[stem]
-        if not data_uri:
-            # Try case-insensitive lookup
-            filename_lower = filename.lower()
-            for key, value in media_map.items():
-                if key.lower() == filename_lower:
-                    data_uri = value
-                    break
-        if not data_uri:
-            # Try without extension
-            stem = Path(filename).stem
-            if stem:
-                stem_lower = stem.lower()
-                for key, value in media_map.items():
-                    key_stem = Path(key).stem
-                    if key_stem.lower() == stem_lower:
-                        data_uri = value
-                        break
+        data_uri = resolve_media_reference(src)
         if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)
         return f"{prefix}{url}"
 
     return _UNQUOTED_IMG_SRC_PATTERN.sub(unquoted_replacement, html)
+
+
+def _lookup_media_reference(media_map: Dict[str, str], filename: str) -> str | None:
+    """Return the stored media filename for *filename* using relaxed matching."""
+
+    match = media_map.get(filename)
+    if match:
+        return match
+
+    filename_lower = filename.lower()
+    for key, value in media_map.items():
+        if key.lower() == filename_lower:
+            return value
+
+    stem_lower = Path(filename).stem.lower()
+    if not stem_lower:
+        return None
+
+    for key, value in media_map.items():
+        if Path(key).stem.lower() == stem_lower:
+            return value
+
+    return None
 
 
 def _build_media_url(stored_name: str, media_url_path: str) -> str:
