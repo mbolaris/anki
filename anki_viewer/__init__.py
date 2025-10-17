@@ -8,6 +8,7 @@ cards.
 from __future__ import annotations
 
 import os
+import time
 import re
 import shutil
 import tempfile
@@ -62,6 +63,8 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     """
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
+    # Configurable TTL for media directory listing cache (seconds)
+    app.config.setdefault("MEDIA_LOOKUP_TTL", float(os.environ.get("ANKI_MEDIA_LOOKUP_TTL", "5.0")))
     # Prefer a secret key supplied via environment for production safety.
     env_secret = os.environ.get("ANKI_VIEWER_SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
     if env_secret:
@@ -108,6 +111,9 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     # Cache for loaded decks - keeps all decks in memory for fast switching
     # Clear cache on startup to ensure fresh load with correct media directory
     deck_cache = {}
+
+    # In-memory media lookup stats (counts and total time in seconds)
+    media_lookup_stats = {"count": 0, "total_time_s": 0.0}
 
     # Initialize ratings store
     ratings_store = RatingsStore(data_dir)
@@ -535,6 +541,28 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         return jsonify({"requested": filename, "matches": matches})
 
+    @app.route("/dev/media-stats")
+    def dev_media_stats():
+        """Developer-only endpoint exposing media lookup stats.
+
+        Enabled when ANKI_VIEWER_DEV=1 or app.debug. Returns counts and average
+        lookup time in milliseconds.
+        """
+        enabled = os.environ.get("ANKI_VIEWER_DEV") == "1" or app.debug
+        if not enabled:
+            abort(404)
+
+        stats = dict(media_lookup_stats)
+        avg_ms = None
+        if stats.get("count"):
+            avg_ms = (stats.get("total_time_s", 0.0) / max(1, stats.get("count"))) * 1000.0
+
+        return jsonify({
+            "count": stats.get("count", 0),
+            "total_time_ms": int(stats.get("total_time_s", 0.0) * 1000),
+            "avg_lookup_time_ms": int(avg_ms) if avg_ms is not None else None,
+        })
+
     @app.route("/api/deck/<int:deck_id>/ratings")
     def get_ratings(deck_id: int):
         """Get all card ratings for a specific deck.
@@ -630,10 +658,23 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         # Delegate the lookup to a helper that returns (stored_name, reason)
         # where reason is one of: 'exact', 'map-exact', 'map-ci', 'fs-ci'
-        candidate, reason = _find_media_for_filename(media_dir, filename, current_state.get("deck_collection"))
+        start = time.time()
+        ttl = float(app.config.get("MEDIA_LOOKUP_TTL", 5.0))
+        candidate, reason = _find_media_for_filename(media_dir, filename, current_state.get("deck_collection"), ttl=ttl)
+        elapsed = time.time() - start
+
+        # update in-memory stats
+        try:
+            media_lookup_stats["count"] += 1
+            media_lookup_stats["total_time_s"] += elapsed
+        except Exception:
+            pass
+
         if candidate:
             try:
                 resp = send_from_directory(media_dir, candidate)
+                # diagnostic timing header in milliseconds
+                resp.headers["X-Media-Lookup-Time-ms"] = str(int(elapsed * 1000))
                 if reason and reason != "exact":
                     resp.headers["X-Media-Fallback"] = reason
                 return resp
@@ -736,7 +777,7 @@ def _gather_image_sources(card: object, *, media_url_path: str) -> list[str]:
     return sorted(sources)
 
 
-def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCollection | None) -> tuple[str | None, str | None]:
+def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCollection | None, ttl: float | None = None) -> tuple[str | None, str | None]:
     """Find a safe media filename to serve for *filename*.
 
     Lookup order (safe, deterministic):
@@ -753,22 +794,7 @@ def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCol
     if "/" in filename or "\\" in filename:
         return None, None
 
-    # First, inspect the filesystem for case-insensitive matches and ambiguity
-    try:
-        fs_entries = [entry for entry in Path(media_dir).iterdir() if entry.is_file() and entry.name.lower() == filename.lower()]
-    except OSError:
-        fs_entries = []
-
-    if len(fs_entries) > 1:
-        # Ambiguous on disk; never guess
-        return None, None
-    if len(fs_entries) == 1:
-        stored_name = fs_entries[0].name
-        if stored_name == filename:
-            return stored_name, "exact"
-        return stored_name, "fs-ci"
-
-    # If nothing found on disk, check collection media map (if available)
+    # 2/3) Prefer the collection's media map if available (fast, avoids scanning)
     if collection and collection.media_filenames:
         # exact key
         if filename in collection.media_filenames:
@@ -782,6 +808,45 @@ def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCol
         if len(ci_matches) > 1:
             # ambiguous map matches; don't guess
             return None, None
+
+    # 4) As a last resort, inspect the filesystem for case-insensitive matches.
+    # Use a short-lived in-process cache to avoid re-scanning the media
+    # directory for every single lookup (reduces overhead when serving many
+    # images for a deck). The cache is keyed by absolute directory path and
+    # stores a set of filenames along with the timestamp it was read.
+    def _get_media_names_cached(dirpath: str, ttl: float) -> set[str]:
+        cache = getattr(_get_media_names_cached, "_cache", None)
+        if cache is None:
+            cache = {}
+            setattr(_get_media_names_cached, "_cache", cache)
+
+        now = time.time()
+        key = os.path.abspath(dirpath)
+        entry = cache.get(key)
+        if entry and now - entry[0] < ttl:
+            return entry[1]
+
+        try:
+            names = {n for n in os.listdir(key) if os.path.isfile(os.path.join(key, n))}
+        except OSError:
+            names = set()
+
+        cache[key] = (now, names)
+        return names
+
+    # use provided ttl or fallback to sensible default
+    ttl = float(ttl) if ttl is not None else 5.0
+    names = _get_media_names_cached(str(media_dir), ttl=ttl)
+    ci_matches = [n for n in names if n.lower() == filename.lower()]
+
+    if len(ci_matches) > 1:
+        # Ambiguous on disk; never guess
+        return None, None
+    if len(ci_matches) == 1:
+        stored_name = ci_matches[0]
+        if stored_name == filename:
+            return stored_name, "exact"
+        return stored_name, "fs-ci"
 
     # Nothing found
     return None, None
