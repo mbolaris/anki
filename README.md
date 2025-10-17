@@ -83,3 +83,24 @@ exercises the index, deck, API, and card endpoints using Flask's test client.
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up a
 development environment, running tests, and submitting improvements.
+
+Developer notes
+---------------
+
+- Run locally (Windows PowerShell):
+
+```powershell
+& .\.venv\Scripts\Activate.ps1
+python app.py
+```
+
+- Run tests:
+
+```powershell
+python -m pytest -q
+```
+
+- Dev-only media diagnostics: set `ANKI_VIEWER_DEV=1` to enable
+   `/dev/media-matches/<filename>` which lists case-insensitive matches in the
+   media directory to aid debugging ambiguous filenames.
+

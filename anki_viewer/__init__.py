@@ -506,6 +506,35 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         return jsonify({"cards": cards_payload})
 
+    @app.route("/health")
+    def health():
+        """Lightweight health check used by monitoring and dev tooling."""
+        return jsonify({"status": "ok"})
+
+    @app.route("/dev/media-matches/<path:filename>")
+    def dev_media_matches(filename: str):
+        """Developer-only endpoint that lists case-insensitive filename matches.
+
+        Enabled when the environment variable ANKI_VIEWER_DEV=1 or when Flask
+        debug mode is active. This is only for troubleshooting and should not be
+        exposed in production.
+        """
+        enabled = os.environ.get("ANKI_VIEWER_DEV") == "1" or app.debug
+        if not enabled:
+            abort(404)
+
+        media_dir = app.config.get("MEDIA_DIRECTORY")
+        if media_dir is None:
+            abort(404)
+
+        # collect case-insensitive matches in the media directory
+        try:
+            matches = [entry.name for entry in Path(media_dir).iterdir() if entry.is_file() and entry.name.lower() == filename.lower()]
+        except OSError:
+            matches = []
+
+        return jsonify({"requested": filename, "matches": matches})
+
     @app.route("/api/deck/<int:deck_id>/ratings")
     def get_ratings(deck_id: int):
         """Get all card ratings for a specific deck.
@@ -599,63 +628,23 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         if media_dir is None:
             abort(404)
 
-        # 1) Try exact filesystem path (preserves subpaths if provided)
-        target = media_dir / filename
-        try:
-            if target.exists() and target.is_file():
-                return send_from_directory(media_dir, filename)
-        except (OSError, NotFound):
-            # Fall through to fallback handling
-            pass
-
-        # Do not attempt fuzzy lookups for paths containing directories
-        if "/" in filename or "\\" in filename:
-            abort(404)
-
-        # 2) Check current collection media map: exact then case-insensitive full-name only
-        collection = current_state.get("deck_collection")
-        if collection and collection.media_filenames:
-            # Exact (case-sensitive) first
-            if filename in collection.media_filenames:
-                candidate = collection.media_filenames[filename]
-                try:
-                    return send_from_directory(media_dir, candidate)
-                except (FileNotFoundError, NotFound, OSError):
-                    pass
-
-            # Case-insensitive full filename lookup (safe, low-risk)
-            filename_lower = filename.lower()
-            ci_matches = [stored for key, stored in collection.media_filenames.items() if key.lower() == filename_lower]
-            if len(ci_matches) == 1:
-                try:
-                    app.logger.info("Serving media file via case-insensitive map match: %s -> %s", filename, ci_matches[0])
-                    return send_from_directory(media_dir, ci_matches[0])
-                except (FileNotFoundError, NotFound, OSError):
-                    pass
-            if len(ci_matches) > 1:
-                app.logger.warning("Ambiguous case-insensitive media map matches for %s: %s", filename, ci_matches)
-                abort(404)
-
-        # 3) Finally, do a case-insensitive scan of the media directory filenames (full name only)
-        try:
-            matches = [entry.name for entry in Path(media_dir).iterdir() if entry.is_file() and entry.name.lower() == filename.lower()]
-        except OSError:
-            matches = []
-
-        if len(matches) == 1:
+        # Delegate the lookup to a helper that returns (stored_name, reason)
+        # where reason is one of: 'exact', 'map-exact', 'map-ci', 'fs-ci'
+        candidate, reason = _find_media_for_filename(media_dir, filename, current_state.get("deck_collection"))
+        if candidate:
             try:
-                app.logger.info("Serving media file via case-insensitive filesystem match: %s -> %s", filename, matches[0])
-                return send_from_directory(media_dir, matches[0])
+                resp = send_from_directory(media_dir, candidate)
+                if reason and reason != "exact":
+                    resp.headers["X-Media-Fallback"] = reason
+                return resp
             except (FileNotFoundError, NotFound, OSError):
                 pass
-        if len(matches) > 1:
-            app.logger.warning("Ambiguous case-insensitive filesystem matches for %s: %s", filename, matches)
-            abort(404)
 
-        # No safe match found
         abort(404)
 
     return app
+
+
 
 
 __all__ = [
@@ -745,6 +734,57 @@ def _gather_image_sources(card: object, *, media_url_path: str) -> list[str]:
                 sources.add(src)
 
     return sorted(sources)
+
+
+def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCollection | None) -> tuple[str | None, str | None]:
+    """Find a safe media filename to serve for *filename*.
+
+    Lookup order (safe, deterministic):
+    1. Exact filesystem path (supports subpaths)
+    2. Exact key in collection.media_filenames (case-sensitive)
+    3. Case-insensitive full-key match in collection.media_filenames (single match only)
+    4. Case-insensitive filename match in the media directory itself (single match only)
+
+    Returns a tuple of (stored_filename_to_serve, reason) where reason is one
+    of: 'exact', 'map-exact', 'map-ci', 'fs-ci'. If nothing is found returns
+    (None, None).
+    """
+    # Disallow fuzzy lookups for paths that contain directory separators
+    if "/" in filename or "\\" in filename:
+        return None, None
+
+    # First, inspect the filesystem for case-insensitive matches and ambiguity
+    try:
+        fs_entries = [entry for entry in Path(media_dir).iterdir() if entry.is_file() and entry.name.lower() == filename.lower()]
+    except OSError:
+        fs_entries = []
+
+    if len(fs_entries) > 1:
+        # Ambiguous on disk; never guess
+        return None, None
+    if len(fs_entries) == 1:
+        stored_name = fs_entries[0].name
+        if stored_name == filename:
+            return stored_name, "exact"
+        return stored_name, "fs-ci"
+
+    # If nothing found on disk, check collection media map (if available)
+    if collection and collection.media_filenames:
+        # exact key
+        if filename in collection.media_filenames:
+            return collection.media_filenames[filename], "map-exact"
+
+        # case-insensitive full key matches
+        filename_lower = filename.lower()
+        ci_matches = [stored for key, stored in collection.media_filenames.items() if key.lower() == filename_lower]
+        if len(ci_matches) == 1:
+            return ci_matches[0], "map-ci"
+        if len(ci_matches) > 1:
+            # ambiguous map matches; don't guess
+            return None, None
+
+    # Nothing found
+    return None, None
 
 
 def _clean_media_directory(media_dir: Path) -> None:
