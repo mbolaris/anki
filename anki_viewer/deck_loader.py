@@ -7,7 +7,6 @@ import shutil
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
-from html import escape as html_escape
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List
@@ -178,13 +177,11 @@ def load_collection(
         # extracted directory without the file being locked by SQLite.
         copy_path = Path(tempfile.mktemp(prefix="anki_viewer_collection_"))
         try:
-            import shutil
-
             shutil.copy2(collection_path, copy_path)
             collection = _load_from_sqlite(copy_path, media_map, media_url_path)
         finally:
             try:
-                Path(copy_path).unlink()
+                copy_path.unlink()
             except Exception:
                 # Best effort cleanup of the copied DB; ignore errors.
                 pass
@@ -198,8 +195,6 @@ def load_collection(
         # Windows it's possible for other processes (indexers, AV) to hold
         # short-lived locks; ignore cleanup errors here.
         try:
-            import shutil
-
             shutil.rmtree(tmp_dir)
         except Exception:
             pass
@@ -228,7 +223,7 @@ def _find_collection_file(extracted_path: Path) -> Path:
         potential = extracted_path / candidate
         if potential.exists():
             return potential
-    raise DeckLoadError("collection.anki21 not found in package")
+    raise DeckLoadError(f"No collection.anki file found in package at {extracted_path} (checked: collection.anki21, collection.anki2)")
 
 
 def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:

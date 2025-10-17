@@ -583,6 +583,11 @@ a {
   margin: auto auto;
 }
 
+/* Hide all cards by default until JavaScript initializes */
+.card-stage:not([data-initialized="true"]) .card {
+  display: none !important;
+}
+
 .card-stage .empty-state {
   text-align: center;
   color: var(--muted);

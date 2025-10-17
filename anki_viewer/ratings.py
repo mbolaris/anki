@@ -19,7 +19,8 @@ class RatingsStore:
         self.ratings_dir = None
         if data_dir:
             self.ratings_dir = data_dir / ".ratings"
-            self.ratings_dir.mkdir(exist_ok=True)
+            # Ensure parent directories are created as well and ignore if already exists
+            self.ratings_dir.mkdir(parents=True, exist_ok=True)
 
     def get_file(self, deck_id: int) -> Path:
         """Get the ratings file path for a specific deck.

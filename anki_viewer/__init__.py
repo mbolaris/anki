@@ -7,6 +7,7 @@ cards.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import tempfile
@@ -61,7 +62,20 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     """
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    app.secret_key = "anki_viewer_secret_key_change_in_production"
+    # Prefer a secret key supplied via environment for production safety.
+    env_secret = os.environ.get("ANKI_VIEWER_SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
+    if env_secret:
+        app.secret_key = env_secret
+    else:
+        app.secret_key = "anki_viewer_secret_key_change_in_production"
+        # Log a visible warning to remind developers to set a secure key.
+        try:
+            app.logger.warning(
+                "Using default secret key for Flask; set ANKI_VIEWER_SECRET_KEY in production to a secure value"
+            )
+        except Exception:
+            # If logging isn't available, continue silently.
+            pass
 
     configured_media_path = (
         media_url_path if media_url_path is not None else app.config.get("MEDIA_URL_PATH")
@@ -584,10 +598,62 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         media_dir = app.config.get("MEDIA_DIRECTORY")
         if media_dir is None:
             abort(404)
+
+        # 1) Try exact filesystem path (preserves subpaths if provided)
+        target = media_dir / filename
         try:
-            return send_from_directory(media_dir, filename)
-        except (FileNotFoundError, NotFound):
+            if target.exists() and target.is_file():
+                return send_from_directory(media_dir, filename)
+        except (OSError, NotFound):
+            # Fall through to fallback handling
+            pass
+
+        # Do not attempt fuzzy lookups for paths containing directories
+        if "/" in filename or "\\" in filename:
             abort(404)
+
+        # 2) Check current collection media map: exact then case-insensitive full-name only
+        collection = current_state.get("deck_collection")
+        if collection and collection.media_filenames:
+            # Exact (case-sensitive) first
+            if filename in collection.media_filenames:
+                candidate = collection.media_filenames[filename]
+                try:
+                    return send_from_directory(media_dir, candidate)
+                except (FileNotFoundError, NotFound, OSError):
+                    pass
+
+            # Case-insensitive full filename lookup (safe, low-risk)
+            filename_lower = filename.lower()
+            ci_matches = [stored for key, stored in collection.media_filenames.items() if key.lower() == filename_lower]
+            if len(ci_matches) == 1:
+                try:
+                    app.logger.info("Serving media file via case-insensitive map match: %s -> %s", filename, ci_matches[0])
+                    return send_from_directory(media_dir, ci_matches[0])
+                except (FileNotFoundError, NotFound, OSError):
+                    pass
+            if len(ci_matches) > 1:
+                app.logger.warning("Ambiguous case-insensitive media map matches for %s: %s", filename, ci_matches)
+                abort(404)
+
+        # 3) Finally, do a case-insensitive scan of the media directory filenames (full name only)
+        try:
+            matches = [entry.name for entry in Path(media_dir).iterdir() if entry.is_file() and entry.name.lower() == filename.lower()]
+        except OSError:
+            matches = []
+
+        if len(matches) == 1:
+            try:
+                app.logger.info("Serving media file via case-insensitive filesystem match: %s -> %s", filename, matches[0])
+                return send_from_directory(media_dir, matches[0])
+            except (FileNotFoundError, NotFound, OSError):
+                pass
+        if len(matches) > 1:
+            app.logger.warning("Ambiguous case-insensitive filesystem matches for %s: %s", filename, matches)
+            abort(404)
+
+        # No safe match found
+        abort(404)
 
     return app
 

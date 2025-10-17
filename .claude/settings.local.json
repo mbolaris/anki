@@ -10,7 +10,12 @@
       "Bash(timeout:*)",
       "Bash(curl:*)",
       "Bash(cat:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ipconfig:*)",
+      "Read(//c/**)",
+      "Read(//tmp/**)"
     ],
     "deny": [],
     "ask": []
