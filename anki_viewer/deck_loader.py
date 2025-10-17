@@ -274,10 +274,20 @@ def _read_media(extracted_path: Path, destination: Path) -> Dict[str, str]:
             stored_name = _store_media_file(destination, filename, file_path)
             if not stored_name:
                 continue
+            # Store with original filename
             media_map[filename] = stored_name
+            # Store with lowercase filename for case-insensitive lookup
+            filename_lower = filename.lower()
+            if filename_lower != filename and filename_lower not in media_map:
+                media_map[filename_lower] = stored_name
+            # Store stem without extension
             stem = Path(filename).stem
             if stem and stem != filename and stem not in media_map:
                 media_map[stem] = stored_name
+            # Store lowercase stem
+            stem_lower = stem.lower()
+            if stem_lower and stem_lower != stem and stem_lower not in media_map:
+                media_map[stem_lower] = stored_name
         except OSError:
             continue
     return media_map
@@ -705,6 +715,23 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
             if stem and stem in media_map:
                 data_uri = media_map[stem]
         if not data_uri:
+            # Try case-insensitive lookup
+            filename_lower = filename.lower()
+            for key, value in media_map.items():
+                if key.lower() == filename_lower:
+                    data_uri = value
+                    break
+        if not data_uri:
+            # Try without extension
+            stem = Path(filename).stem
+            if stem:
+                stem_lower = stem.lower()
+                for key, value in media_map.items():
+                    key_stem = Path(key).stem
+                    if key_stem.lower() == stem_lower:
+                        data_uri = value
+                        break
+        if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)
         return f"{prefix}{quote}{url}{quote}"
@@ -720,6 +747,23 @@ def _inline_media(html: str, media_map: Dict[str, str], media_url_path: str) -> 
             stem = Path(filename).stem
             if stem and stem in media_map:
                 data_uri = media_map[stem]
+        if not data_uri:
+            # Try case-insensitive lookup
+            filename_lower = filename.lower()
+            for key, value in media_map.items():
+                if key.lower() == filename_lower:
+                    data_uri = value
+                    break
+        if not data_uri:
+            # Try without extension
+            stem = Path(filename).stem
+            if stem:
+                stem_lower = stem.lower()
+                for key, value in media_map.items():
+                    key_stem = Path(key).stem
+                    if key_stem.lower() == stem_lower:
+                        data_uri = value
+                        break
         if not data_uri:
             return match.group(0)
         url = _build_media_url(data_uri, media_url_path)

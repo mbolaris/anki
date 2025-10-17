@@ -26,3 +26,9 @@ anki_viewer/static/screenshots/
 .DS_Store
 .idea/
 .vscode/
+
+# Windows command output files
+nul
+
+# Media directory (generated at runtime)
+data/media/

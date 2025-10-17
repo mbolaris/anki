@@ -589,6 +589,13 @@ a {
   max-width: 48ch;
 }
 
+.card-stage .card:not(.is-active) {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  pointer-events: none !important;
+}
+
 .card-stage .card {
   grid-area: 1 / 1;
   width: min(100%, 65ch);
@@ -597,7 +604,7 @@ a {
   transition: opacity 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   pointer-events: none;
-  display: none;
+  display: none !important;
 }
 
 .card-stage .card.is-active {
@@ -605,7 +612,9 @@ a {
   transform: translateX(0);
   pointer-events: auto;
   z-index: 2;
-  display: flex;
+  display: flex !important;
+  visibility: visible !important;
+  position: relative !important;
 }
 
 .card {
@@ -1458,17 +1467,26 @@ a {
   .card-stage {
     flex: 1;
     min-height: 0;
-    display: flex;
-    align-items: center;
+    display: grid;
+    align-items: start;
+    justify-items: center;
   }
 
   /* Card improvements - compact but readable */
-  .card {
+  .card-stage .card {
     padding: 0.75rem;
     border-radius: 0.75rem;
     width: 100% !important;
     max-width: 100%;
     box-sizing: border-box;
+    grid-area: 1 / 1;
+    display: none !important;
+    opacity: 0;
+  }
+
+  .card-stage .card.is-active {
+    display: flex !important;
+    opacity: 1;
   }
 
   .card-header {

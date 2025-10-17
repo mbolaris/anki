@@ -432,12 +432,18 @@
       cardElements.forEach((card) => {
         const isActive = card.dataset.cardId === cardId;
         card.classList.toggle("is-active", isActive);
+        // Force display with inline styles as fallback for CSS issues
         if (!isActive) {
           card.classList.remove("revealed");
+          card.style.display = "none";
+          card.style.visibility = "hidden";
+          card.style.position = "absolute";
         } else {
           activeCard = card;
+          card.style.display = "flex";
+          card.style.visibility = "visible";
+          card.style.position = "relative";
         }
-        card.hidden = !isActive;
         updateQuestionVisibility(card);
       });
       if (cardId) {
@@ -650,7 +656,6 @@
         currentIndex = -1;
         cardElements.forEach((card) => {
           card.classList.remove("is-active", "revealed");
-          card.hidden = true;
           updateQuestionVisibility(card);
         });
         updateCardTypeIndicator(null);

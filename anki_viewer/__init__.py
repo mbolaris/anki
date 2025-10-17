@@ -69,7 +69,20 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     media_url_path = _normalize_media_url_path(configured_media_path)
     app.config["MEDIA_URL_PATH"] = media_url_path
 
-    media_directory = Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
+    # Use a fixed media directory to avoid creating new temp dirs on each reload
+    if data_dir:
+        media_directory = (data_dir / "media").resolve()  # Use absolute path
+        media_directory.mkdir(parents=True, exist_ok=True)
+    else:
+        media_directory = Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
+
+    # Validate media directory is absolute and accessible
+    if not media_directory.is_absolute():
+        raise ValueError(f"Media directory must be absolute path, got: {media_directory}")
+    if not media_directory.exists():
+        raise ValueError(f"Media directory does not exist: {media_directory}")
+
+    app.logger.info(f"Media directory: {media_directory} (absolute: {media_directory.is_absolute()})")
     app.config["MEDIA_DIRECTORY"] = media_directory
     app.config["DATA_DIR"] = data_dir
 
@@ -79,6 +92,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         available_packages = sorted([p for p in data_dir.glob("*.apkg") if p.is_file()])
 
     # Cache for loaded decks - keeps all decks in memory for fast switching
+    # Clear cache on startup to ensure fresh load with correct media directory
     deck_cache = {}
 
     # Initialize ratings store
