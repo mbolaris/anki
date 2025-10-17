@@ -138,6 +138,10 @@
         return;
       }
 
+      if (shouldPreserveImageStructure(img)) {
+        return;
+      }
+
       const wrapper = document.createElement("span");
       wrapper.className = "media-wrapper";
       wrapper.setAttribute("data-media-wrapper", "true");
@@ -165,6 +169,32 @@
       img.addEventListener("load", updateState);
       img.addEventListener("error", updateState);
       updateState();
+    }
+
+    function shouldPreserveImageStructure(img) {
+      if (!(img instanceof HTMLImageElement)) {
+        return false;
+      }
+
+      if (img.matches("[data-preserve-image-structure]")) {
+        return true;
+      }
+
+      const parent = img.parentElement;
+      if (!(parent instanceof HTMLElement)) {
+        return false;
+      }
+
+      if (parent.matches("[data-preserve-image-structure]")) {
+        return true;
+      }
+
+      const parentId = parent.getAttribute("id") || "";
+      if (parentId.startsWith("io-")) {
+        return true;
+      }
+
+      return false;
     }
 
     let activeCardIds = [];
