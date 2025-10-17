@@ -30,6 +30,12 @@ from .ratings import RatingsStore
 _DEFAULT_MEDIA_URL_PATH = "/media"
 _IMAGE_SRC_PATTERN = re.compile(r"<img[^>]+src=['\"]([^'\"]+)['\"][^>]*>", re.IGNORECASE)
 
+# In-process caches to avoid repeated os.listdir/stat for common lookups.
+# _MEDIA_NAMES_CACHE: {abs_path: (timestamp, set_of_names)}
+_MEDIA_NAMES_CACHE: dict = {}
+# _MEDIA_LOOKUP_CACHE: {(abs_path, filename): (timestamp, stored_name, reason)}
+_MEDIA_LOOKUP_CACHE: dict = {}
+
 
 def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None = None, data_dir: Optional[Path] = None) -> Flask:
     """Create and configure the Flask application.
@@ -414,9 +420,10 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
                 {"num": deletion.get("num"), "content": deletion.get("content")}
                 for deletion in card.cloze_deletions
             ]
-        elif card.card_type == "image" and image_sources:
+        if card.card_type == "image" and image_sources:
             payload["images"] = image_sources
 
+        # Use the consolidated debug helper (keeps logic in one place)
         payload["debug"] = _build_card_debug_payload(
             card,
             image_sources=image_sources,
@@ -424,7 +431,6 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
             media_directory=current_state["media_directory"],
             deck_collection=current_state["deck_collection"],
         )
-
         return jsonify(payload)
 
     @app.route("/api/cards")
@@ -850,19 +856,106 @@ def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCol
     if "/" in filename or "\\" in filename:
         return None, None
 
+    # consult per-dir lookup cache first
+    if ttl is None:
+        effective_ttl = 5.0
+    else:
+        effective_ttl = float(ttl)
+
+    # Nested helpers for caching - define before first use to avoid
+    # UnboundLocalError when referenced earlier in the function.
+    def _get_media_names_cached(dirpath: str, ttl: float) -> set[str]:
+        """Return a cached set of filenames for dirpath using module-level cache.
+
+        The cache is invalidated if the directory mtime changes. This allows
+        tests (which may create files between requests) to see new files
+        immediately while still avoiding repeated full directory scans.
+        """
+        now = time.time()
+        key = os.path.abspath(dirpath)
+        entry = _MEDIA_NAMES_CACHE.get(key)
+
+        # Try to read current directory mtime; if unavailable, fall back to
+        # always-refresh behaviour.
+        try:
+            dir_mtime = os.path.getmtime(key)
+        except OSError:
+            dir_mtime = None
+
+        if entry:
+            stored_ts, stored_names, stored_mtime = entry[0], entry[1], entry[2]
+            if stored_mtime is not None and dir_mtime is not None:
+                # If directory mtime changed, force a refresh
+                if stored_mtime == dir_mtime and now - stored_ts < ttl:
+                    return stored_names
+            else:
+                # If we can't determine mtimes, fall back to time-based TTL
+                if now - stored_ts < ttl:
+                    return stored_names
+
+        try:
+            names = {n for n in os.listdir(key) if os.path.isfile(os.path.join(key, n))}
+        except OSError:
+            names = set()
+
+        _MEDIA_NAMES_CACHE[key] = (now, names, dir_mtime)
+        return names
+
+    def _get_cached_lookup(dirpath: str, filename: str, ttl: float):
+        """Return cached lookup result (stored_name, reason) if fresh and dir
+        hasn't changed, else None.
+        """
+        now = time.time()
+        key = (os.path.abspath(dirpath), filename)
+        entry = _MEDIA_LOOKUP_CACHE.get(key)
+        if not entry:
+            return None
+
+        stored_ts, stored_name, stored_reason, stored_dir_mtime = entry
+        # If cached entry is too old, drop it
+        if now - stored_ts >= ttl:
+            return None
+
+        # If directory mtime available, ensure it matches
+        try:
+            current_mtime = os.path.getmtime(os.path.abspath(dirpath))
+        except OSError:
+            current_mtime = None
+
+        if stored_dir_mtime is not None and current_mtime is not None:
+            if stored_dir_mtime != current_mtime:
+                return None
+
+        return stored_name, stored_reason
+
+    def _set_cached_lookup(dirpath: str, filename: str, stored: str | None, reason: str | None):
+        try:
+            dir_mtime = os.path.getmtime(os.path.abspath(dirpath))
+        except OSError:
+            dir_mtime = None
+        key = (os.path.abspath(dirpath), filename)
+        _MEDIA_LOOKUP_CACHE[key] = (time.time(), stored, reason, dir_mtime)
+
+    cached = _get_cached_lookup(str(media_dir), filename, effective_ttl)
+    if cached is not None:
+        return cached
+
     # 2/3) Prefer the collection's media map if available (fast, avoids scanning)
     if collection and collection.media_filenames:
         # exact key
         if filename in collection.media_filenames:
+            _set_cached_lookup(str(media_dir), filename, collection.media_filenames[filename], "map-exact")
             return collection.media_filenames[filename], "map-exact"
 
         # case-insensitive full key matches
         filename_lower = filename.lower()
         ci_matches = [stored for key, stored in collection.media_filenames.items() if key.lower() == filename_lower]
         if len(ci_matches) == 1:
+            _set_cached_lookup(str(media_dir), filename, ci_matches[0], "map-ci")
             return ci_matches[0], "map-ci"
         if len(ci_matches) > 1:
             # ambiguous map matches; don't guess
+            _set_cached_lookup(str(media_dir), filename, None, None)
             return None, None
 
     # 4) As a last resort, inspect the filesystem for case-insensitive matches.
@@ -870,38 +963,19 @@ def _find_media_for_filename(media_dir: Path, filename: str, collection: DeckCol
     # directory for every single lookup (reduces overhead when serving many
     # images for a deck). The cache is keyed by absolute directory path and
     # stores a set of filenames along with the timestamp it was read.
-    def _get_media_names_cached(dirpath: str, ttl: float) -> set[str]:
-        cache = getattr(_get_media_names_cached, "_cache", None)
-        if cache is None:
-            cache = {}
-            setattr(_get_media_names_cached, "_cache", cache)
-
-        now = time.time()
-        key = os.path.abspath(dirpath)
-        entry = cache.get(key)
-        if entry and now - entry[0] < ttl:
-            return entry[1]
-
-        try:
-            names = {n for n in os.listdir(key) if os.path.isfile(os.path.join(key, n))}
-        except OSError:
-            names = set()
-
-        cache[key] = (now, names)
-        return names
-
-    # use provided ttl or fallback to sensible default
-    ttl = float(ttl) if ttl is not None else 5.0
-    names = _get_media_names_cached(str(media_dir), ttl=ttl)
+    names = _get_media_names_cached(str(media_dir), ttl=effective_ttl)
     ci_matches = [n for n in names if n.lower() == filename.lower()]
 
     if len(ci_matches) > 1:
         # Ambiguous on disk; never guess
+        _set_cached_lookup(str(media_dir), filename, None, None)
         return None, None
     if len(ci_matches) == 1:
         stored_name = ci_matches[0]
         if stored_name == filename:
+            _set_cached_lookup(str(media_dir), filename, stored_name, "exact")
             return stored_name, "exact"
+        _set_cached_lookup(str(media_dir), filename, stored_name, "fs-ci")
         return stored_name, "fs-ci"
 
     # Nothing found
