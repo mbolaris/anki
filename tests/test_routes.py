@@ -1,6 +1,7 @@
 """Integration tests for Flask routes."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterator
 
@@ -70,12 +71,21 @@ def sample_collection(tmp_path: Path) -> DeckCollection:
 
 
 @pytest.fixture
-def app(sample_collection: DeckCollection, monkeypatch: pytest.MonkeyPatch) -> Iterator:
+def app(
+    sample_collection: DeckCollection,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> Iterator:
     """Create a Flask app that serves the sample collection."""
 
     monkeypatch.setattr(anki_viewer, "load_collection", lambda *_, **__: sample_collection)
-    application = create_app()
+    application = create_app(data_dir=tmp_path)
     application.config["MEDIA_DIRECTORY"] = sample_collection.media_directory
+
+    for stored_name in sample_collection.media_filenames.values():
+        media_path = sample_collection.media_directory / stored_name
+        if not media_path.exists():
+            media_path.write_bytes(b"PNG")
 
     yield application
 
@@ -181,9 +191,74 @@ def test_api_cards_returns_503_when_deck_missing(failing_app) -> None:
     assert response.status_code == 503
 
 
+def test_rating_endpoint_allows_multiple_labels(client) -> None:
+    """Ratings API should preserve independent labels for a card."""
+
+    response = client.post(
+        "/api/card/1/rating",
+        json={"deck_id": 1, "rating": ["favorite"]},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["rating"] == ["favorite"]
+
+    response = client.post(
+        "/api/card/1/rating",
+        json={"deck_id": 1, "rating": ["favorite", "memorized"]},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["rating"] == ["favorite", "memorized"]
+
+    response = client.get("/api/deck/1/ratings")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload == {"ratings": {"1": ["favorite", "memorized"]}}
+
+
 def test_normalize_media_url_path_variations() -> None:
     """Internal helper should normalise user-provided media paths."""
 
     assert anki_viewer._normalize_media_url_path("media") == "/media"
     assert anki_viewer._normalize_media_url_path("/assets/") == "/assets"
     assert anki_viewer._normalize_media_url_path("") == "/media"
+
+
+def _extract_hide_memorized_button(html: str) -> str:
+    match = re.search(
+        r"<button[^>]+data-action=\"toggle-hide-memorized\"[^>]*>.*?</button>",
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group(0)
+
+
+def test_deck_template_hides_memorized_by_default(app, sample_collection: DeckCollection) -> None:
+    """Regular decks should hide memorized cards initially."""
+
+    with app.test_request_context('/'):
+        template = app.jinja_env.get_template("deck.html")
+        html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
+
+    assert 'data-hide-memorized-default="true"' in html
+    button = _extract_hide_memorized_button(html)
+    assert 'aria-pressed="true"' in button
+    assert 'title="Show memorized cards"' in button
+    assert '>Show Memorized<' in button
+
+
+def test_favorites_template_shows_memorized_by_default(app, sample_collection: DeckCollection) -> None:
+    """Favorites view should surface memorized cards automatically."""
+
+    with app.test_request_context('/'):
+        template = app.jinja_env.get_template("deck.html")
+        html = template.render(
+            deck=sample_collection.decks[1],
+            collection=sample_collection,
+            is_favorites=True,
+        )
+
+    assert 'data-hide-memorized-default="false"' in html
+    button = _extract_hide_memorized_button(html)
+    assert 'aria-pressed="false"' in button
+    assert 'title="Hide memorized cards"' in button
+    assert '>Hide Memorized<' in button

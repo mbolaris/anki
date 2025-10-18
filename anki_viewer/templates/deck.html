@@ -6,11 +6,13 @@
 {% block site_header %}{% endblock %}
 {% block site_footer %}{% endblock %}
 {% block content %}
+  {% set hide_memorized_default = (not is_favorites|default(false)) %}
   <section
     class="card-viewer"
     data-deck-id="{{ deck.deck_id }}"
     data-total-cards="{{ deck.cards|length }}"
     data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
+    data-hide-memorized-default="{{ 'true' if hide_memorized_default else 'false' }}"
   >
     <header class="viewer__toolbar" aria-label="Deck controls">
       <div class="viewer__toolbar-top">
@@ -71,9 +73,15 @@
             <span class="toolbar-button__label">Known</span>
             <span class="toolbar-button__hint" aria-hidden="true">K</span>
           </button>
-          <button type="button" class="toolbar-button" data-action="toggle-hide-memorized" title="Hide memorized cards" aria-pressed="false">
+          <button
+            type="button"
+            class="toolbar-button"
+            data-action="toggle-hide-memorized"
+            title="{{ 'Show memorized cards' if hide_memorized_default else 'Hide memorized cards' }}"
+            aria-pressed="{{ 'true' if hide_memorized_default else 'false' }}"
+          >
             <span class="toolbar-button__icon" aria-hidden="true">👁</span>
-            <span class="toolbar-button__label">Show Memorized</span>
+            <span class="toolbar-button__label">{{ 'Show Memorized' if hide_memorized_default else 'Hide Memorized' }}</span>
           </button>
           <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
             <span class="toolbar-button__icon" aria-hidden="true">↺</span>
