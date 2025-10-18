@@ -532,7 +532,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         Returns
         -------
         flask.Response
-            JSON payload with ratings mapping (card_id -> rating).
+            JSON payload with ratings mapping (card_id -> list[str]).
         """
         if not data_dir:
             abort(501, description="Ratings storage not configured")
@@ -542,7 +542,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
     @app.route("/api/card/<int:card_id>/rating", methods=["POST"])
     def set_rating(card_id: int):
-        """Set or clear a rating for a specific card.
+        """Set or clear ratings for a specific card.
 
         Parameters
         ----------
@@ -553,7 +553,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         ------------
         JSON with:
             - deck_id: int - The deck containing the card
-            - rating: str - "favorite", "bad", or "" to clear
+            - rating: list[str] | str | dict[str, bool] - Active ratings for the card
 
         Returns
         -------
@@ -565,28 +565,33 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
 
         data = request.get_json() or {}
         deck_id = data.get("deck_id")
-        rating = data.get("rating", "")
+        raw_rating = data.get("rating")
 
         if not deck_id:
             abort(400, description="deck_id is required")
 
-        if rating not in ["favorite", "bad", "memorized", ""]:
-            abort(400, description="rating must be 'favorite', 'bad', 'memorized', or empty string")
+        if raw_rating in (None, "", [], {}):
+            rating_labels: list[str] = []
+        else:
+            normalized = RatingsStore._normalize_rating_entry(raw_rating)
+            if not normalized:
+                abort(400, description="rating must include at least one of 'favorite', 'bad', or 'memorized'")
+            rating_labels = sorted(normalized)
 
         # Load existing ratings
         ratings = ratings_store.load(deck_id)
 
         # Update or remove rating
         card_id_str = str(card_id)
-        if rating:
-            ratings[card_id_str] = rating
+        if rating_labels:
+            ratings[card_id_str] = rating_labels
         else:
             ratings.pop(card_id_str, None)
 
         # Save back
         ratings_store.save(deck_id, ratings)
 
-        return jsonify({"success": True, "card_id": card_id, "rating": rating})
+        return jsonify({"success": True, "card_id": card_id, "rating": rating_labels})
 
     media_route_prefix = media_url_path or _DEFAULT_MEDIA_URL_PATH
 

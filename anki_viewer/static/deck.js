@@ -116,6 +116,36 @@
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
     const ratingsMap = new Map();
+    const VALID_RATINGS = new Set(["favorite", "bad", "memorized"]);
+
+    function normalizeRatingValue(value) {
+      const normalized = new Set();
+      if (!value) {
+        return normalized;
+      }
+      if (typeof value === "string") {
+        if (VALID_RATINGS.has(value)) {
+          normalized.add(value);
+        }
+        return normalized;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((entry) => {
+          if (typeof entry === "string" && VALID_RATINGS.has(entry)) {
+            normalized.add(entry);
+          }
+        });
+        return normalized;
+      }
+      if (typeof value === "object") {
+        Object.entries(value).forEach(([label, active]) => {
+          if (active && VALID_RATINGS.has(label)) {
+            normalized.add(label);
+          }
+        });
+      }
+      return normalized;
+    }
 
     function setupCardMedia(card) {
       if (!card || card.dataset.mediaSetup === "true") {
@@ -236,29 +266,30 @@
       }
       try {
         const obj = JSON.parse(raw);
-        Object.entries(obj).forEach(([id, rating]) => {
-          if (rating && ["favorite", "bad", "memorized"].includes(rating)) {
-            ratingsMap.set(id, rating);
+        Object.entries(obj).forEach(([id, ratingValue]) => {
+          const normalized = normalizeRatingValue(ratingValue);
+          if (normalized.size > 0) {
+            ratingsMap.set(id, normalized);
           }
         });
       } catch (error) {
         console.warn("Unable to parse ratings data", error);
       }
 
-      for (const [cardId] of ratingsMap.entries()) {
+      ratingsMap.forEach((_, cardId) => {
         updateCardRatingUI(cardId);
-      }
+      });
     }
 
     function persistRatings() {
       const obj = {};
-      for (const [id, rating] of ratingsMap.entries()) {
-        obj[id] = rating;
+      for (const [id, ratingSet] of ratingsMap.entries()) {
+        obj[id] = Array.from(ratingSet).sort();
       }
       writeToStorage(ratingsKey, JSON.stringify(obj));
     }
 
-    async function saveRatingToServer(cardId, rating) {
+    async function saveRatingsToServer(cardId, ratingSet) {
       try {
         const response = await fetch(`/api/card/${cardId}/rating`, {
           method: "POST",
@@ -267,7 +298,7 @@
           },
           body: JSON.stringify({
             deck_id: Number.parseInt(deckId, 10),
-            rating: rating || "",
+            rating: ratingSet ? Array.from(ratingSet).sort() : [],
           }),
         });
         if (!response.ok) {
@@ -278,13 +309,22 @@
       }
     }
 
-    async function setCardRating(cardId, rating) {
-      if (rating && !["favorite", "bad", "memorized"].includes(rating)) {
+    async function toggleCardRating(cardId, rating) {
+      if (!VALID_RATINGS.has(rating)) {
         return;
       }
 
-      if (rating) {
-        ratingsMap.set(cardId, rating);
+      const existing = ratingsMap.get(cardId);
+      const updated = existing ? new Set(existing) : new Set();
+
+      if (updated.has(rating)) {
+        updated.delete(rating);
+      } else {
+        updated.add(rating);
+      }
+
+      if (updated.size > 0) {
+        ratingsMap.set(cardId, updated);
       } else {
         ratingsMap.delete(cardId);
       }
@@ -292,7 +332,18 @@
       persistRatings();
       updateCardRatingUI(cardId);
       refreshActiveCards(cardId);
-      await saveRatingToServer(cardId, rating);
+      await saveRatingsToServer(cardId, ratingsMap.get(cardId));
+    }
+
+    async function clearCardRatings(cardId) {
+      if (!ratingsMap.has(cardId)) {
+        return;
+      }
+      ratingsMap.delete(cardId);
+      persistRatings();
+      updateCardRatingUI(cardId);
+      refreshActiveCards(cardId);
+      await saveRatingsToServer(cardId, undefined);
     }
 
     function updateCardRatingUI(cardId) {
@@ -301,15 +352,20 @@
         return;
       }
 
-      const rating = ratingsMap.get(cardId);
+      const ratingSet = ratingsMap.get(cardId);
 
       // Update card class
       card.classList.remove("card--rated-favorite", "card--rated-bad", "card--rated-memorized");
-      if (rating === "favorite") {
+      const isFavorite = Boolean(ratingSet && ratingSet.has("favorite"));
+      const isBad = Boolean(ratingSet && ratingSet.has("bad"));
+      const isMemorized = Boolean(ratingSet && ratingSet.has("memorized"));
+      if (isFavorite) {
         card.classList.add("card--rated-favorite");
-      } else if (rating === "bad") {
+      }
+      if (isBad) {
         card.classList.add("card--rated-bad");
-      } else if (rating === "memorized") {
+      }
+      if (isMemorized) {
         card.classList.add("card--rated-memorized");
       }
 
@@ -317,22 +373,18 @@
       const buttons = card.querySelectorAll(".rating-button");
       buttons.forEach((button) => {
         const buttonRating = button.getAttribute("data-rating");
-        if (buttonRating === rating) {
-          button.classList.add("is-active");
-          button.setAttribute("aria-pressed", "true");
-        } else {
-          button.classList.remove("is-active");
-          button.setAttribute("aria-pressed", "false");
+        const isActive = Boolean(buttonRating && ratingSet && ratingSet.has(buttonRating));
+        button.classList.toggle("is-active", isActive);
+        if (buttonRating) {
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
         }
       });
 
       const clearButton = card.querySelector('[data-action="clear-rating"]');
       if (clearButton) {
-        if (rating) {
-          clearButton.classList.add("is-visible");
-        } else {
-          clearButton.classList.remove("is-visible");
-        }
+        const hasAnyRating = Boolean(ratingSet && ratingSet.size > 0);
+        clearButton.classList.toggle("is-visible", hasAnyRating);
+        clearButton.setAttribute("aria-pressed", hasAnyRating ? "true" : "false");
       }
     }
 
@@ -345,18 +397,24 @@
         }
         const data = await response.json();
         if (data.ratings) {
+          const previouslyRated = new Set(ratingsMap.keys());
           ratingsMap.clear();
-          Object.entries(data.ratings).forEach(([cardId, rating]) => {
-            if (rating && ["favorite", "bad", "memorized"].includes(rating)) {
-              ratingsMap.set(cardId, rating);
+          Object.entries(data.ratings).forEach(([cardId, ratingValue]) => {
+            const normalized = normalizeRatingValue(ratingValue);
+            if (normalized.size > 0) {
+              ratingsMap.set(cardId, normalized);
+              previouslyRated.delete(cardId);
             }
           });
           persistRatings();
 
           // Update UI for all rated cards
-          for (const [cardId] of ratingsMap.entries()) {
+          ratingsMap.forEach((_, cardId) => {
             updateCardRatingUI(cardId);
-          }
+          });
+          previouslyRated.forEach((cardId) => {
+            updateCardRatingUI(cardId);
+          });
           const activeCard = getActiveCardElement();
           const preserveId = activeCard ? activeCard.dataset.cardId : undefined;
           refreshActiveCards(preserveId);
@@ -563,7 +621,8 @@
           return false;
         }
         const isKnown = knownSet.has(cardId);
-        const isMemorized = hideMemorized && ratingsMap.get(cardId) === "memorized";
+        const ratingSet = ratingsMap.get(cardId);
+        const isMemorized = Boolean(hideMemorized && ratingSet && ratingSet.has("memorized"));
         const card = cardById.get(cardId);
         if (card) {
           card.classList.toggle("is-known", isKnown);
@@ -879,28 +938,28 @@
         case "set-rating-favorite": {
           const card = getActiveCardElement();
           if (card) {
-            setCardRating(card.dataset.cardId, "favorite");
+            toggleCardRating(card.dataset.cardId, "favorite");
           }
           break;
         }
         case "set-rating-bad": {
           const card = getActiveCardElement();
           if (card) {
-            setCardRating(card.dataset.cardId, "bad");
+            toggleCardRating(card.dataset.cardId, "bad");
           }
           break;
         }
         case "set-rating-memorized": {
           const card = getActiveCardElement();
           if (card) {
-            setCardRating(card.dataset.cardId, "memorized");
+            toggleCardRating(card.dataset.cardId, "memorized");
           }
           break;
         }
         case "clear-rating": {
           const card = getActiveCardElement();
           if (card) {
-            setCardRating(card.dataset.cardId, "");
+            clearCardRatings(card.dataset.cardId);
           }
           break;
         }
@@ -931,13 +990,13 @@
         const rating = target.getAttribute("data-rating");
         const card = target.closest(".card");
         if (card && rating) {
-          setCardRating(card.dataset.cardId, rating);
+          toggleCardRating(card.dataset.cardId, rating);
         }
       } else if (action === "clear-rating") {
         event.preventDefault();
         const card = target.closest(".card");
         if (card) {
-          setCardRating(card.dataset.cardId, "");
+          clearCardRatings(card.dataset.cardId);
         }
       } else if (action) {
         event.preventDefault();
