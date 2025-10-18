@@ -8,14 +8,27 @@ cards.
 from __future__ import annotations
 
 import os
-import time
 import re
 import shutil
 import tempfile
+import time
+from dataclasses import dataclass, field
+from logging import Logger
 from pathlib import Path
-from typing import Iterable, Optional
+from types import SimpleNamespace
+from typing import Callable, Iterable
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 from werkzeug.exceptions import NotFound
 
 from .card_types import (
@@ -36,8 +49,57 @@ _MEDIA_NAMES_CACHE: dict = {}
 # _MEDIA_LOOKUP_CACHE: {(abs_path, filename): (timestamp, stored_name, reason)}
 _MEDIA_LOOKUP_CACHE: dict = {}
 
+@dataclass
+class _AppState:
+    """Holds mutable state for the running application."""
 
-def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None = None, data_dir: Optional[Path] = None) -> Flask:
+    media_directory: Path
+    package_path: Path
+    deck_collection: DeckCollection | None = None
+    deck_cache: dict[str, DeckCollection] = field(default_factory=dict)
+
+    def load_deck(
+        self,
+        pkg_path: Path,
+        *,
+        clean_media: bool,
+        media_url_path: str,
+    ) -> tuple[DeckCollection | None, bool]:
+        """Load *pkg_path* into memory and update the cached state."""
+
+        cache_key = str(pkg_path.resolve())
+        if cache_key in self.deck_cache:
+            collection = self.deck_cache[cache_key]
+            self.deck_collection = collection
+            self.package_path = pkg_path
+            return collection, True
+
+        try:
+            if clean_media:
+                _clean_media_directory(self.media_directory)
+
+            collection = load_collection(
+                pkg_path,
+                media_dir=self.media_directory,
+                media_url_path=media_url_path,
+            )
+        except DeckLoadError:
+            self.deck_collection = None
+            self.package_path = pkg_path
+            raise
+
+        self.deck_cache[cache_key] = collection
+        self.deck_collection = collection
+        self.package_path = pkg_path
+        return collection, False
+
+
+def create_app(
+    apkg_path: Path | None = None,
+    *,
+    media_url_path: str | None = None,
+    data_dir: Path | None = None,
+) -> Flask:
     """Create and configure the Flask application.
 
     Parameters
@@ -69,119 +131,45 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     """
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    # Configurable TTL for media directory listing cache (seconds)
     app.config.setdefault("MEDIA_LOOKUP_TTL", float(os.environ.get("ANKI_MEDIA_LOOKUP_TTL", "5.0")))
-    # Prefer a secret key supplied via environment for production safety.
-    env_secret = os.environ.get("ANKI_VIEWER_SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
-    if env_secret:
-        app.secret_key = env_secret
-    else:
-        app.secret_key = "anki_viewer_secret_key_change_in_production"
-        # Log a visible warning to remind developers to set a secure key.
-        try:
-            app.logger.warning(
-                "Using default secret key for Flask; set ANKI_VIEWER_SECRET_KEY in production to a secure value"
-            )
-        except Exception:
-            # If logging isn't available, continue silently.
-            pass
 
-    configured_media_path = (
-        media_url_path if media_url_path is not None else app.config.get("MEDIA_URL_PATH")
-    )
+    _configure_secret_key(app)
+
+    configured_media_path = media_url_path or app.config.get("MEDIA_URL_PATH")
     media_url_path = _normalize_media_url_path(configured_media_path)
     app.config["MEDIA_URL_PATH"] = media_url_path
 
-    # Use a fixed media directory to avoid creating new temp dirs on each reload
-    if data_dir:
-        media_directory = (data_dir / "media").resolve()  # Use absolute path
-        media_directory.mkdir(parents=True, exist_ok=True)
-    else:
-        media_directory = Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
-
-    # Validate media directory is absolute and accessible
-    if not media_directory.is_absolute():
-        raise ValueError(f"Media directory must be absolute path, got: {media_directory}")
-    if not media_directory.exists():
-        raise ValueError(f"Media directory does not exist: {media_directory}")
-
-    app.logger.info(f"Media directory: {media_directory} (absolute: {media_directory.is_absolute()})")
+    media_directory = _resolve_media_directory(data_dir)
     app.config["MEDIA_DIRECTORY"] = media_directory
     app.config["DATA_DIR"] = data_dir
+    app.logger.info("Media directory: %s", media_directory)
 
-    # Discover available deck files
-    available_packages = []
-    if data_dir and data_dir.exists():
-        available_packages = sorted([p for p in data_dir.glob("*.apkg") if p.is_file()])
+    available_packages = _discover_packages(data_dir)
+    starting_package = _select_starting_package(apkg_path, available_packages)
 
-    # Cache for loaded decks - keeps all decks in memory for fast switching
-    # Clear cache on startup to ensure fresh load with correct media directory
-    deck_cache = {}
+    state = _AppState(media_directory=media_directory, package_path=starting_package)
 
-    # In-memory media lookup stats (counts and total time in seconds)
+    ratings_store = RatingsStore(data_dir)
     media_lookup_stats = {"count": 0, "total_time_s": 0.0}
 
-    # Initialize ratings store
-    ratings_store = RatingsStore(data_dir)
-
-    # Determine default deck - prefer MCAT_Milesdown.apkg if available
-    default_deck = Path("data/MCAT_High_Yield.apkg")
-    if available_packages:
-        # Look for MCAT_Milesdown.apkg specifically
-        milesdown_deck = next((p for p in available_packages if p.name == "MCAT_Milesdown.apkg"), None)
-        default_deck = milesdown_deck if milesdown_deck else available_packages[0]
-
-    # State for current deck - will be modified by switch_deck
-    current_state = {
-        "package_path": apkg_path or default_deck,
-        "deck_collection": None,
-        "media_directory": media_directory,
-    }
-
-    def _load_deck(pkg_path: Path, clean_media: bool = True) -> DeckCollection | None:
-        """Load a deck and update current state. Uses cache for instant switching.
-
-        Parameters
-        ----------
-        pkg_path:
-            Path to the .apkg file to load.
-        clean_media:
-            If True, clean the media directory before loading. Set to False when
-            loading multiple decks (e.g., for favorites) to preserve media files.
-        """
-        # Check if deck is already cached
-        cache_key = str(pkg_path)
-        if cache_key in deck_cache:
-            app.logger.info(f"Loading deck from cache: {pkg_path.name}")
-            current_state["deck_collection"] = deck_cache[cache_key]
-            current_state["package_path"] = pkg_path
-            return deck_cache[cache_key]
-
+    def load_deck(pkg_path: Path, *, clean_media: bool = True) -> DeckCollection | None:
         try:
-            app.logger.info(f"Loading deck from file: {pkg_path.name}")
-            # Only clean media directory if requested (don't clean when loading for favorites)
-            if clean_media:
-                _clean_media_directory(current_state["media_directory"])
-
-            collection = load_collection(
+            collection, from_cache = state.load_deck(
                 pkg_path,
-                media_dir=current_state["media_directory"],
+                clean_media=clean_media,
                 media_url_path=media_url_path,
             )
-
-            # Store in cache
-            deck_cache[cache_key] = collection
-
-            current_state["deck_collection"] = collection
-            current_state["package_path"] = pkg_path
-            return collection
         except DeckLoadError as exc:
-            app.logger.warning("Unable to load deck: %s", exc)
-            current_state["deck_collection"] = None
+            app.logger.warning("Unable to load deck %s: %s", pkg_path.name, exc)
             return None
 
-    # Load initial deck
-    _load_deck(current_state["package_path"])
+        if from_cache:
+            app.logger.info("Loaded deck from cache: %s", pkg_path.name)
+        else:
+            app.logger.info("Loaded deck from file: %s", pkg_path.name)
+        return collection
+
+    load_deck(starting_package)
 
     @app.context_processor
     def inject_globals() -> dict:
@@ -198,12 +186,12 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         True
         """
         return {
-            "deck_collection": current_state["deck_collection"],
-            "missing_package": current_state["deck_collection"] is None,
-            "package_path": current_state["package_path"],
+            "deck_collection": state.deck_collection,
+            "missing_package": state.deck_collection is None,
+            "package_path": state.package_path,
             "media_url_path": media_url_path,
             "available_packages": available_packages,
-            "current_package": current_state["package_path"],
+            "current_package": state.package_path,
         }
 
     def _build_deck_filters(collection: DeckCollection) -> list[dict[str, str | None]]:
@@ -240,9 +228,9 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> index().status_code in {200, 404}
         True
         """
-        if current_state["deck_collection"] is None:
-            return render_template("missing_package.html", package_path=current_state["package_path"])
-        collection = current_state["deck_collection"]
+        if state.deck_collection is None:
+            return render_template("missing_package.html", package_path=state.package_path)
+        collection = state.deck_collection
         filters = _build_deck_filters(collection)
         return render_template(
             "index.html",
@@ -272,7 +260,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
             abort(404)
 
         # Hot reload the new deck
-        _load_deck(target_path)
+        load_deck(target_path)
         flash(f"Switched to {filename}")
         return redirect(url_for('index'))
 
@@ -295,14 +283,14 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> deck(0)[1] if isinstance(deck(0), tuple) else deck(0).status_code  # doctest: +SKIP
         404
         """
-        if current_state["deck_collection"] is None:
-            return render_template("missing_package.html", package_path=current_state["package_path"]), 404
+        if state.deck_collection is None:
+            return render_template("missing_package.html", package_path=state.package_path), 404
 
-        deck = current_state["deck_collection"].decks.get(deck_id)
+        deck = state.deck_collection.decks.get(deck_id)
         if deck is None:
             return render_template("deck_not_found.html", deck_id=deck_id), 404
 
-        return render_template("deck.html", deck=deck, collection=current_state["deck_collection"])
+        return render_template("deck.html", deck=deck, collection=state.deck_collection)
 
     @app.route("/favorites")
     def favorites():
@@ -316,56 +304,31 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         if not data_dir:
             abort(501, description="Favorites deck requires data directory")
 
-        # Get all favorites across all decks
-        all_favorites = ratings_store.get_all_favorites()
+        favorites_map = ratings_store.get_all_favorites()
 
-        if not all_favorites:
+        if not favorites_map:
             flash("No favorite cards yet! Mark some cards as favorites to see them here.")
             return redirect(url_for('index'))
 
-        # Collect all favorited cards from all deck collections
-        favorite_cards = []
-
-        # First, clean the media directory once before loading all decks
-        _clean_media_directory(current_state["media_directory"])
-
-        # Load all deck files to get the favorited cards
-        # Use clean_media=False to preserve media from all decks
-        for pkg_path in available_packages:
-            try:
-                # Load the deck without cleaning media (accumulate media from all decks)
-                collection = _load_deck(pkg_path, clean_media=False)
-                if not collection:
-                    continue
-
-                # Get favorites for decks in this collection
-                for deck_id, deck in collection.decks.items():
-                    if deck_id not in all_favorites:
-                        continue
-
-                    favorite_card_ids = all_favorites[deck_id]
-
-                    for card in deck.cards:
-                        if str(card.card_id) in favorite_card_ids:
-                            favorite_cards.append(card)
-
-            except Exception as e:
-                app.logger.warning(f"Failed to load cards from {pkg_path}: {e}")
-                continue
+        favorite_cards = _collect_favorite_cards(
+            available_packages,
+            loader=load_deck,
+            favorites_map=favorites_map,
+            media_directory=state.media_directory,
+            logger=app.logger,
+        )
 
         if not favorite_cards:
             flash("No favorite cards found. The favorites may be from decks that are no longer available.")
             return redirect(url_for('index'))
 
-        # Create a synthetic Deck object for the favorites
-        from types import SimpleNamespace
         favorites_deck = SimpleNamespace(
             deck_id=999999,  # Special ID for favorites
             name="Favorites",
             cards=favorite_cards
         )
 
-        return render_template("deck.html", deck=favorites_deck, collection=current_state["deck_collection"], is_favorites=True)
+        return render_template("deck.html", deck=favorites_deck, collection=state.deck_collection, is_favorites=True)
 
     @app.route("/deck/<int:deck_id>/card/<int:card_id>.json")
     def card_data(deck_id: int, card_id: int):
@@ -392,10 +355,10 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         >>> card_data(1, 1).status_code  # doctest: +SKIP
         200
         """
-        if current_state["deck_collection"] is None:
+        if state.deck_collection is None:
             abort(404)
 
-        deck = current_state["deck_collection"].decks.get(deck_id)
+        deck = state.deck_collection.decks.get(deck_id)
         if deck is None:
             abort(404)
 
@@ -428,8 +391,8 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
             card,
             image_sources=image_sources,
             media_url_path=media_url_path,
-            media_directory=current_state["media_directory"],
-            deck_collection=current_state["deck_collection"],
+            media_directory=state.media_directory,
+            deck_collection=state.deck_collection,
         )
         return jsonify(payload)
 
@@ -452,11 +415,11 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         {'cards': [...]}  # doctest: +SKIP
         """
 
-        if current_state["deck_collection"] is None:
+        if state.deck_collection is None:
             abort(503)
 
         cards_payload = []
-        for deck in current_state["deck_collection"].decks.values():
+        for deck in state.deck_collection.decks.values():
             for card in deck.cards:
                 cards_payload.append(
                     {
@@ -622,7 +585,7 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
         # where reason is one of: 'exact', 'map-exact', 'map-ci', 'fs-ci'
         start = time.time()
         ttl = float(app.config.get("MEDIA_LOOKUP_TTL", 5.0))
-        candidate, reason = _find_media_for_filename(media_dir, filename, current_state.get("deck_collection"), ttl=ttl)
+        candidate, reason = _find_media_for_filename(media_dir, filename, state.deck_collection, ttl=ttl)
         elapsed = time.time() - start
 
         # update in-memory stats
@@ -648,8 +611,6 @@ def create_app(apkg_path: Optional[Path] = None, *, media_url_path: str | None =
     return app
 
 
-
-
 __all__ = [
     "create_app",
     "detect_card_type",
@@ -657,6 +618,99 @@ __all__ = [
     "is_image_card",
     "parse_cloze_deletions",
 ]
+
+
+def _configure_secret_key(app: Flask) -> None:
+    """Configure ``app.secret_key`` with sensible defaults."""
+
+    env_secret = os.environ.get("ANKI_VIEWER_SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")
+    if env_secret:
+        app.secret_key = env_secret
+        return
+
+    app.secret_key = "anki_viewer_secret_key_change_in_production"
+    try:
+        app.logger.warning(
+            "Using default secret key for Flask; set ANKI_VIEWER_SECRET_KEY in production to a secure value"
+        )
+    except Exception:
+        pass
+
+
+def _resolve_media_directory(data_dir: Path | None) -> Path:
+    """Return an absolute media directory, creating it when needed."""
+
+    if data_dir:
+        media_dir = (data_dir / "media").resolve()
+        media_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        media_dir = Path(tempfile.mkdtemp(prefix="anki_viewer_media_"))
+
+    if not media_dir.is_absolute():
+        raise ValueError(f"Media directory must be absolute path, got: {media_dir}")
+    if not media_dir.exists():
+        raise ValueError(f"Media directory does not exist: {media_dir}")
+
+    return media_dir
+
+
+def _discover_packages(data_dir: Path | None) -> list[Path]:
+    """Return all ``.apkg`` packages contained in *data_dir*."""
+
+    if not data_dir or not data_dir.exists():
+        return []
+    return sorted(p for p in data_dir.glob("*.apkg") if p.is_file())
+
+
+def _select_starting_package(provided: Path | None, packages: Iterable[Path]) -> Path:
+    """Choose the initial deck to load for the application."""
+
+    if provided:
+        return provided
+
+    preferred = next((p for p in packages if p.name == "MCAT_Milesdown.apkg"), None)
+    if preferred:
+        return preferred
+
+    return next(iter(packages), Path("data/MCAT_High_Yield.apkg"))
+
+
+def _collect_favorite_cards(
+    packages: Iterable[Path],
+    *,
+    loader: Callable[..., DeckCollection | None],
+    favorites_map: dict[int, dict[str, str]],
+    media_directory: Path,
+    logger: Logger,
+) -> list[object]:
+    """Aggregate favorite cards from all known decks."""
+
+    if not packages:
+        return []
+
+    _clean_media_directory(media_directory)
+    favorite_cards: list[object] = []
+
+    for pkg_path in packages:
+        try:
+            collection = loader(pkg_path, clean_media=False)
+        except Exception as exc:  # pragma: no cover - defensive log
+            logger.warning("Failed to load cards from %s: %s", pkg_path, exc)
+            continue
+
+        if not collection:
+            continue
+
+        for deck_id, deck in collection.decks.items():
+            favorite_ids = favorites_map.get(deck_id)
+            if not favorite_ids:
+                continue
+
+            favorite_cards.extend(
+                card for card in deck.cards if str(card.card_id) in favorite_ids
+            )
+
+    return favorite_cards
 
 
 def _normalize_media_url_path(value: str | None) -> str:
