@@ -7,12 +7,14 @@
 {% block site_footer %}{% endblock %}
 {% block content %}
   {% set hide_memorized_default = (not is_favorites|default(false)) %}
+  {% set hide_known_default = true %}
   <section
     class="card-viewer"
     data-deck-id="{{ deck.deck_id }}"
     data-total-cards="{{ deck.cards|length }}"
     data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
     data-hide-memorized-default="{{ 'true' if hide_memorized_default else 'false' }}"
+    data-hide-known-default="{{ 'true' if hide_known_default else 'false' }}"
   >
     <header class="viewer__toolbar" aria-label="Deck controls">
       <div class="viewer__toolbar-top">
@@ -87,23 +89,40 @@
             <span class="toolbar-button__label">Known</span>
             <span class="toolbar-button__hint" aria-hidden="true">K</span>
           </button>
-          {% set show_memorized = not hide_memorized_default %}
           <button
             type="button"
             class="toolbar-toggle toggle-switch"
-            data-action="toggle-hide-memorized"
+            data-action="toggle-hide-known"
             role="switch"
-            aria-checked="{{ 'true' if show_memorized else 'false' }}"
-            aria-pressed="{{ 'false' if show_memorized else 'true' }}"
-            data-state="{{ 'on' if show_memorized else 'off' }}"
-            title="{{ 'Hide memorized cards' if show_memorized else 'Show memorized cards' }}"
+            aria-checked="{{ 'true' if hide_known_default else 'false' }}"
+            aria-pressed="{{ 'true' if hide_known_default else 'false' }}"
+            data-state="{{ 'on' if hide_known_default else 'off' }}"
+            title="{{ 'Show known cards' if hide_known_default else 'Hide known cards' }}"
           >
             <span class="toggle-switch__track" aria-hidden="true">
               <span class="toggle-switch__thumb"></span>
             </span>
             <span class="toggle-switch__content">
-              <span class="toggle-switch__label">{{ 'Hide Memorized' if show_memorized else 'Show Memorized' }}</span>
-              <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if show_memorized else 'Off' }}</span>
+              <span class="toggle-switch__label">{{ 'Hide Known' if hide_known_default else 'Show Known' }}</span>
+              <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if hide_known_default else 'Off' }}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="toolbar-toggle toggle-switch"
+            data-action="toggle-hide-memorized"
+            role="switch"
+            aria-checked="{{ 'true' if hide_memorized_default else 'false' }}"
+            aria-pressed="{{ 'true' if hide_memorized_default else 'false' }}"
+            data-state="{{ 'on' if hide_memorized_default else 'off' }}"
+            title="{{ 'Show memorized cards' if hide_memorized_default else 'Hide memorized cards' }}"
+          >
+            <span class="toggle-switch__track" aria-hidden="true">
+              <span class="toggle-switch__thumb"></span>
+            </span>
+            <span class="toggle-switch__content">
+              <span class="toggle-switch__label">{{ 'Hide Memorized' if hide_memorized_default else 'Show Memorized' }}</span>
+              <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if hide_memorized_default else 'Off' }}</span>
             </span>
           </button>
           <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
@@ -114,13 +133,21 @@
         <div class="toolbar-group toolbar-group--end" role="group" aria-label="Utilities">
           <button
             type="button"
-            class="toolbar-button"
+            class="toolbar-toggle toggle-switch"
             data-action="toggle-debug"
-            title="Toggle debug information (D)"
+            role="switch"
+            aria-checked="false"
+            aria-pressed="false"
+            data-state="off"
+            title="Show debug information (D)"
           >
-            <span class="toolbar-button__icon" aria-hidden="true">🐛</span>
-            <span class="toolbar-button__label">Debug</span>
-            <span class="toolbar-button__hint" aria-hidden="true">D</span>
+            <span class="toggle-switch__track" aria-hidden="true">
+              <span class="toggle-switch__thumb"></span>
+            </span>
+            <span class="toggle-switch__content">
+              <span class="toggle-switch__label">Debug</span>
+              <span class="toggle-switch__state" data-role="toggle-state">Off</span>
+            </span>
           </button>
           <button
             type="button"
