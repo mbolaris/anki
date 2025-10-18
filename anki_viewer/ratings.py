@@ -1,9 +1,12 @@
-"""Persistent storage for card ratings (favorites, bad, unmarked)."""
+"""Persistent storage for card ratings (favorites, bad, memorized)."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable, Mapping
+
+
+VALID_RATINGS = {"favorite", "bad", "memorized"}
 
 
 class RatingsStore:
@@ -35,14 +38,14 @@ class RatingsStore:
             raise RuntimeError("Ratings store not initialized with data directory")
         return self.ratings_dir / f"deck_{deck_id}.json"
 
-    def load(self, deck_id: int) -> Dict[str, str]:
+    def load(self, deck_id: int) -> Dict[str, list[str]]:
         """Load ratings for a specific deck.
 
         Args:
             deck_id: The deck identifier
 
         Returns:
-            Dictionary mapping card_id (as string) to rating ("favorite" or "bad")
+            Dictionary mapping card_id (as string) to a list of active ratings.
         """
         if not self.ratings_dir:
             return {}
@@ -50,44 +53,46 @@ class RatingsStore:
         if not file.exists():
             return {}
         try:
-            return json.loads(file.read_text(encoding="utf-8"))
+            data = json.loads(file.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return {}
+        return self._normalize_ratings_map(data)
 
-    def save(self, deck_id: int, ratings: Dict[str, str]) -> None:
+    def save(self, deck_id: int, ratings: Mapping[str, Iterable[str]] | Dict[str, str]) -> None:
         """Save ratings for a specific deck.
 
         Args:
             deck_id: The deck identifier
-            ratings: Dictionary mapping card_id (as string) to rating
+            ratings: Mapping of card_id (as string) to an iterable of rating labels.
         """
         if not self.ratings_dir:
             return
+        normalized = self._normalize_ratings_map(ratings)
         file = self.get_file(deck_id)
-        file.write_text(json.dumps(ratings, indent=2, sort_keys=True), encoding="utf-8")
+        file.write_text(json.dumps(normalized, indent=2, sort_keys=True), encoding="utf-8")
 
-    def get_all_favorites(self) -> Dict[int, Dict[str, str]]:
+    def get_all_favorites(self) -> Dict[int, set[str]]:
         """Get all favorite cards across all decks.
 
         Returns:
-            Dictionary mapping deck_id to dict of card_id -> rating (favorites only)
+            Dictionary mapping deck_id to a set of card_ids that are favorited.
         """
         if not self.ratings_dir:
             return {}
 
-        all_favorites = {}
+        all_favorites: Dict[int, set[str]] = {}
         for ratings_file in self.ratings_dir.glob("deck_*.json"):
             try:
                 # Extract deck_id from filename: "deck_123.json" -> 123
                 deck_id_str = ratings_file.stem.replace("deck_", "")
                 deck_id = int(deck_id_str)
 
-                ratings = json.loads(ratings_file.read_text(encoding="utf-8"))
-                # Filter to only favorites
+                raw = json.loads(ratings_file.read_text(encoding="utf-8"))
+                ratings = self._normalize_ratings_map(raw)
                 favorites = {
-                    card_id: rating
-                    for card_id, rating in ratings.items()
-                    if rating == "favorite"
+                    card_id
+                    for card_id, labels in ratings.items()
+                    if "favorite" in labels
                 }
                 if favorites:
                     all_favorites[deck_id] = favorites
@@ -95,3 +100,38 @@ class RatingsStore:
                 continue
 
         return all_favorites
+
+    def _normalize_ratings_map(
+        self, data: Mapping[str, Iterable[str]] | Dict[str, str]
+    ) -> Dict[str, list[str]]:
+        """Normalize persisted ratings into a canonical dictionary format."""
+
+        normalized: Dict[str, list[str]] = {}
+        for card_id, value in data.items():
+            labels = sorted(self._normalize_rating_entry(value))
+            if labels:
+                normalized[str(card_id)] = labels
+        return normalized
+
+    @staticmethod
+    def _normalize_rating_entry(value: Iterable[str] | Mapping[str, bool] | str) -> set[str]:
+        """Normalize a persisted rating entry to a set of valid labels."""
+
+        normalized: set[str] = set()
+        if isinstance(value, str):
+            if value in VALID_RATINGS:
+                normalized.add(value)
+        elif isinstance(value, Mapping):
+            for label, active in value.items():
+                if active and label in VALID_RATINGS:
+                    normalized.add(label)
+        else:
+            try:
+                iterator = iter(value)
+            except TypeError:
+                iterator = None
+            if iterator is not None:
+                for label in iterator:
+                    if isinstance(label, str) and label in VALID_RATINGS:
+                        normalized.add(label)
+        return normalized
