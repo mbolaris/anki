@@ -589,7 +589,19 @@
       toggle.setAttribute("aria-checked", isActive ? "true" : "false");
       toggle.dataset.state = isActive ? "on" : "off";
 
-      const { activeTitle, inactiveTitle, activeStateText, inactiveStateText } = options;
+      const {
+        activeTitle,
+        inactiveTitle,
+        activeStateText,
+        inactiveStateText,
+        activeLabel,
+        inactiveLabel,
+        pressedWhenActive = true,
+      } = options;
+
+      const isPressed = pressedWhenActive ? isActive : !isActive;
+      toggle.setAttribute("aria-pressed", isPressed ? "true" : "false");
+
       const title = isActive ? activeTitle : inactiveTitle;
       if (title) {
         toggle.setAttribute("title", title);
@@ -600,6 +612,14 @@
         const onText = activeStateText ?? "On";
         const offText = inactiveStateText ?? "Off";
         stateLabel.textContent = isActive ? onText : offText;
+      }
+
+      const labelEl = toggle.querySelector(".toggle-switch__label");
+      if (labelEl && (activeLabel || inactiveLabel)) {
+        const labelText = isActive
+          ? activeLabel ?? labelEl.textContent
+          : inactiveLabel ?? labelEl.textContent;
+        labelEl.textContent = labelText;
       }
     }
 
@@ -622,6 +642,9 @@
       updateToggleSwitch(toggle, showingMemorized, {
         activeTitle: "Hide memorized cards",
         inactiveTitle: "Show memorized cards",
+        activeLabel: "Hide Memorized",
+        inactiveLabel: "Show Memorized",
+        pressedWhenActive: false,
       });
     }
 
