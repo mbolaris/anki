@@ -415,13 +415,9 @@ a {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: clamp(0.5rem, 2vw, 1rem) clamp(1rem, 3vw, 1.5rem);
+  padding: 0 clamp(1rem, 3vw, 1.5rem);
   box-sizing: border-box;
   width: 100%;
-}
-
-.viewer__stage > * {
-  flex: 1 1 auto;
 }
 
 .card-viewer[data-mode="fullscreen"] {
@@ -678,25 +674,14 @@ a {
   justify-items: center;
   align-items: start;
   width: 100%;
-  margin: auto auto;
+  margin: 0 auto;
 }
 
 /* Hide all cards by default until JavaScript initializes */
-.card-stage:not([data-initialized="true"]) .card {
-  display: none !important;
-}
-
 .card-stage .empty-state {
   text-align: center;
   color: var(--muted);
   max-width: 48ch;
-}
-
-.card-stage .card:not(.is-active) {
-  display: none !important;
-  visibility: hidden !important;
-  position: absolute !important;
-  pointer-events: none !important;
 }
 
 .card-stage .card {
@@ -708,6 +693,8 @@ a {
               transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   pointer-events: none;
   display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
 }
 
 .card-stage .card.is-active {

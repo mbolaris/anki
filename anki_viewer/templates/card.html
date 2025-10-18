@@ -10,6 +10,7 @@
       data-card-endpoint="{{ url_for('card_data', deck_id=deck.deck_id, card_id=card.card_id) }}"
     {% endif %}
     {% if is_image %}data-has-images="true"{% endif %}
+    style="display: none; visibility: hidden; position: absolute;"
   >
     <header class="card-header">
       <div class="card-header__primary">
