@@ -1000,6 +1000,11 @@
         target = helpToggleButton;
       } else if (action === "close-help" && helpOverlay) {
         target = helpOverlay.querySelector('[data-action="close-help"]');
+      } else if (action === "mark-memorized") {
+        const activeCard = getActiveCardElement();
+        if (activeCard) {
+          target = activeCard.querySelector('[data-action="set-rating"][data-rating="memorized"]');
+        }
       } else {
         target = viewer.querySelector(`[data-action="${action}"]`);
       }
@@ -1062,13 +1067,9 @@
           }
           break;
         }
-        case "set-rating-memorized": {
-          const card = getActiveCardElement();
-          if (card) {
-            toggleCardRating(card.dataset.cardId, "memorized");
-          }
+        case "set-rating-memorized":
+          markCurrentCardMemorized();
           break;
-        }
         case "clear-rating": {
           const card = getActiveCardElement();
           if (card) {
@@ -1103,7 +1104,11 @@
         const rating = target.getAttribute("data-rating");
         const card = target.closest(".card");
         if (card && rating) {
-          toggleCardRating(card.dataset.cardId, rating);
+          if (rating === "memorized" && card.classList.contains("is-active")) {
+            markCurrentCardMemorized();
+          } else {
+            toggleCardRating(card.dataset.cardId, rating);
+          }
         }
       } else if (action === "clear-rating") {
         event.preventDefault();

@@ -232,6 +232,16 @@ def _extract_toggle_button(html: str, action: str) -> str:
     return match.group(0)
 
 
+def _extract_rating_button(html: str, rating: str) -> str:
+    match = re.search(
+        rf"<button[^>]+data-action=\"set-rating\"[^>]+data-rating=\"{rating}\"[^>]*>.*?</button>",
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group(0)
+
+
 def test_deck_template_hides_memorized_by_default(app, sample_collection: DeckCollection) -> None:
     """Regular decks should hide memorized cards initially."""
 
@@ -277,14 +287,14 @@ def test_debug_control_is_rendered_as_toggle(app, sample_collection: DeckCollect
     assert 'data-role="toggle-state">Off<' in toggle
 
 
-def test_toolbar_has_memorized_button(app, sample_collection: DeckCollection) -> None:
-    """Deck toolbar should expose a memorized action."""
+def test_card_has_memorized_rating_control(app, sample_collection: DeckCollection) -> None:
+    """Each card should expose a memorized rating control."""
 
     with app.test_request_context('/'):
         template = app.jinja_env.get_template("deck.html")
         html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
 
-    button = _extract_toggle_button(html, "mark-memorized")
-    assert 'class="toolbar-button toolbar-button--primary"' in button
-    assert 'title="Toggle memorized (K)"' in button
+    button = _extract_rating_button(html, "memorized")
+    assert 'class="rating-button rating-button--memorized"' in button
+    assert 'title="Mark as Memorized"' in button
     assert '>Memorized<' in button
