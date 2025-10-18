@@ -580,42 +580,56 @@
       });
     }
 
-    function updateShuffleButton() {
-      if (!shuffleToggleButton) {
+    function updateToggleSwitch(toggle, active, options = {}) {
+      if (!toggle) {
         return;
       }
-      shuffleToggleButton.setAttribute("aria-pressed", isShuffled ? "true" : "false");
-      shuffleToggleButton.setAttribute(
-        "title",
-        isShuffled ? "Restore original order" : "Shuffle order"
-      );
-      const label = shuffleToggleButton.querySelector(".toolbar-button__label");
-      if (label) {
-        label.textContent = isShuffled ? "Unshuffle" : "Shuffle";
+
+      const isActive = Boolean(active);
+      toggle.setAttribute("aria-checked", isActive ? "true" : "false");
+      toggle.dataset.state = isActive ? "on" : "off";
+
+      const { activeTitle, inactiveTitle, activeStateText, inactiveStateText } = options;
+      const title = isActive ? activeTitle : inactiveTitle;
+      if (title) {
+        toggle.setAttribute("title", title);
+      }
+
+      const stateLabel = toggle.querySelector('[data-role="toggle-state"]');
+      if (stateLabel) {
+        const onText = activeStateText ?? "On";
+        const offText = inactiveStateText ?? "Off";
+        stateLabel.textContent = isActive ? onText : offText;
       }
     }
 
-    function updateHideMemorizedButton() {
-      const button = viewer.querySelector('[data-action="toggle-hide-memorized"]');
-      if (!button) {
+    function updateShuffleToggle() {
+      if (!shuffleToggleButton) {
         return;
       }
-      button.setAttribute("aria-pressed", hideMemorized ? "true" : "false");
-      button.setAttribute(
-        "title",
-        hideMemorized ? "Show memorized cards" : "Hide memorized cards"
-      );
-      const label = button.querySelector(".toolbar-button__label");
-      if (label) {
-        label.textContent = hideMemorized ? "Show Memorized" : "Hide Memorized";
+      updateToggleSwitch(shuffleToggleButton, isShuffled, {
+        activeTitle: "Restore original order",
+        inactiveTitle: "Shuffle order",
+      });
+    }
+
+    function updateHideMemorizedToggle() {
+      const toggle = viewer.querySelector('[data-action="toggle-hide-memorized"]');
+      if (!toggle) {
+        return;
       }
+      const showingMemorized = !hideMemorized;
+      updateToggleSwitch(toggle, showingMemorized, {
+        activeTitle: "Hide memorized cards",
+        inactiveTitle: "Show memorized cards",
+      });
     }
 
     function toggleHideMemorized() {
       const activeCard = getActiveCardElement();
       const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
       hideMemorized = !hideMemorized;
-      updateHideMemorizedButton();
+      updateHideMemorizedToggle();
       refreshActiveCards(preserveCardId);
     }
 
@@ -656,7 +670,7 @@
 
     function setShuffleState(shuffled, preserveCardId) {
       isShuffled = Boolean(shuffled);
-      updateShuffleButton();
+      updateShuffleToggle();
       refreshActiveCards(preserveCardId);
     }
 
@@ -803,7 +817,7 @@
       });
       updateProgress();
       isShuffled = false;
-      updateShuffleButton();
+      updateShuffleToggle();
       currentIndex = 0;
       refreshActiveCards();
     }
@@ -1173,8 +1187,8 @@
     }
 
     loadRatings();
-    updateShuffleButton();
-    updateHideMemorizedButton();
+    updateShuffleToggle();
+    updateHideMemorizedToggle();
     refreshActiveCards();
     syncFullscreenFromDocument();
 
