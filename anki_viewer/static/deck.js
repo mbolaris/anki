@@ -708,6 +708,8 @@
           if (isMemorized) {
             card.classList.remove("revealed");
             updateQuestionVisibility(card);
+          } else {
+            card.classList.remove("is-memorized");
           }
         }
         return !excludeMemorized;
