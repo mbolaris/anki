@@ -230,7 +230,11 @@
     let activeCardIds = [];
     let currentIndex = -1;
     let isShuffled = false;
+    const hideMemorizedAttr = viewer.getAttribute("data-hide-memorized-default");
     let hideMemorized = true;
+    if (hideMemorizedAttr !== null) {
+      hideMemorized = hideMemorizedAttr.trim().toLowerCase() !== "false";
+    }
 
     const keyToAction = new Map([
       [" ", "flip"],
