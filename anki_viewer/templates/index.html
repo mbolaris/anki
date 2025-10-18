@@ -9,6 +9,31 @@
           <span class="favorites-icon">★</span> Favorites
         </a>
       </div>
+
+      {# Mobile-friendly filter chips #}
+      <div class="deck-filter-mobile">
+        <button
+          type="button"
+          class="filter-chip is-active"
+          data-role="deck-filter-button"
+          data-filter="all"
+          aria-pressed="true"
+        >
+          All
+        </button>
+        {% for filter in deck_filters %}
+          <button
+            type="button"
+            class="filter-chip"
+            data-role="deck-filter-button"
+            data-filter="{{ filter.value }}"
+            aria-pressed="false"
+          >
+            {{ filter.label }}
+          </button>
+        {% endfor %}
+      </div>
+
       <div class="deck-filter">
         <span class="deck-filter__label" id="deck-filter-label">Filter decks</span>
         <div

@@ -1372,7 +1372,393 @@ a {
   overflow: auto;
 }
 
+/* Mobile thumb bar - hidden on desktop */
+.mobile-thumb-bar {
+  display: none;
+}
+
+/* Mobile overflow menu - hidden on desktop */
+.mobile-menu-overlay {
+  display: none;
+}
+
+.mobile-overflow-button {
+  display: none;
+}
+
+/* Mobile filter chips - hidden on desktop */
+.deck-filter-mobile {
+  display: none;
+}
+
 @media (max-width: 640px) {
+  /* Mobile thumb bar - sticky bottom bar with safe area support */
+  .mobile-thumb-bar {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: rgba(15, 23, 42, 0.75);
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .mobile-thumb-bar__ratings {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.4rem;
+    padding: 0.4rem 0.6rem 0.35rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  }
+
+  .thumb-chip {
+    appearance: none;
+    border: 1.5px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(248, 250, 252, 0.95);
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.25rem;
+    min-height: 42px;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    font-size: 0.6rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+  }
+
+  .thumb-chip__icon {
+    font-size: 1.3rem;
+    line-height: 1;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: rgba(248, 250, 252, 0.95) !important;
+  }
+
+  .thumb-chip__label {
+    font-size: 0.6rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: rgba(248, 250, 252, 0.85) !important;
+  }
+
+  .thumb-chip:active {
+    transform: scale(0.95);
+  }
+
+  .thumb-chip.is-active,
+  .thumb-chip.key-pressed {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  }
+
+  .thumb-chip--needs-work.is-active {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    border-color: #f59e0b;
+    color: white;
+  }
+
+  .thumb-chip--mastered.is-active {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-color: #059669;
+    color: white;
+  }
+
+  .thumb-chip--ignore.is-active {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    border-color: #dc2626;
+    color: white;
+  }
+
+  .thumb-chip--clear {
+    opacity: 0.6;
+  }
+
+  .thumb-chip--clear.is-visible {
+    opacity: 1;
+    background: rgba(148, 163, 184, 0.15);
+  }
+
+  .mobile-thumb-bar__nav {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr 1fr;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem 0.6rem;
+    align-items: stretch;
+  }
+
+  .thumb-nav-button {
+    appearance: none;
+    border: 1.5px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(248, 250, 252, 0.95);
+    border-radius: 0.65rem;
+    padding: 0.5rem;
+    min-height: 48px;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .thumb-nav-button__icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: rgba(248, 250, 252, 0.95) !important;
+  }
+
+  .thumb-nav-button__label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: rgba(248, 250, 252, 0.95) !important;
+  }
+
+  .thumb-nav-button--prev .thumb-nav-button__icon,
+  .thumb-nav-button--next .thumb-nav-button__icon,
+  .thumb-nav-button--menu .thumb-nav-button__icon {
+    font-size: 2.2rem;
+    font-weight: 300;
+    color: rgba(248, 250, 252, 0.95) !important;
+  }
+
+  .thumb-nav-button:active {
+    transform: scale(0.95);
+  }
+
+  .thumb-nav-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .thumb-nav-button--primary {
+    background: linear-gradient(135deg, var(--accent-basic), #6366f1);
+    border-color: transparent;
+    color: white;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+  }
+
+  .thumb-nav-button--primary:active {
+    transform: scale(0.97);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+  }
+
+  .thumb-nav-button.key-pressed {
+    animation: thumbButtonPress 0.2s ease;
+  }
+
+  @keyframes thumbButtonPress {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(0.93);
+    }
+  }
+
+  /* Mobile secondary buttons row */
+  .mobile-thumb-bar__secondary {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 0.75rem 0.75rem;
+    justify-content: center;
+  }
+
+  .thumb-secondary-button {
+    appearance: none;
+    border: 2px solid rgba(148, 163, 184, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(248, 250, 252, 0.95);
+    border-radius: 0.6rem;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .thumb-secondary-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .thumb-secondary-button__icon {
+    font-size: 1.8rem;
+    line-height: 1;
+    color: rgba(248, 250, 252, 0.95);
+  }
+
+  /* Mobile menu overlay */
+  .mobile-menu-overlay {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .mobile-menu-overlay[aria-hidden="false"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-menu-overlay__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(4px);
+  }
+
+  .mobile-menu {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface-strong);
+    border-top-left-radius: 1.25rem;
+    border-top-right-radius: 1.25rem;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    max-height: 70vh;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.3);
+  }
+
+  .mobile-menu-overlay[aria-hidden="false"] .mobile-menu {
+    transform: translateY(0);
+  }
+
+  .mobile-menu__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .mobile-menu__title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--fg);
+  }
+
+  .mobile-menu__close {
+    appearance: none;
+    border: none;
+    background: none;
+    font-size: 1.5rem;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0.5rem;
+    line-height: 1;
+  }
+
+  .mobile-menu__content {
+    padding: 0.5rem;
+    overflow-y: auto;
+    max-height: calc(70vh - 80px);
+  }
+
+  .mobile-menu-item {
+    appearance: none;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 0.75rem;
+    transition: background 0.2s ease;
+  }
+
+  .mobile-menu-item:active {
+    background: rgba(99, 102, 241, 0.1);
+  }
+
+  .mobile-menu-item--danger {
+    color: #ef4444;
+  }
+
+  .mobile-menu-item--danger:active {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .mobile-menu-item__icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    min-width: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .mobile-menu-item__text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-align: left;
+  }
+
+  .mobile-menu-item__label {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .mobile-menu-item__desc {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  .mobile-menu-item__state {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
   /* Overall mobile layout improvements */
   html, body {
     font-size: 16px; /* Prevent iOS zoom on input focus */
@@ -1542,12 +1928,13 @@ a {
     height: 3px;
   }
 
-  /* Card content area - flexible height */
+  /* Card content area - flexible height with bottom bar offset */
   .viewer__content {
     flex: 1;
     overflow: auto;
     min-height: 0;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: 110px; /* Space for compact thumb bar */
   }
 
   .viewer__stage {
@@ -1594,49 +1981,9 @@ a {
     padding: 0.15rem 0.5rem;
   }
 
-  /* Rating buttons - larger, clear, touch-friendly */
+  /* Hide card header rating buttons on mobile - using thumb bar instead */
   .card-rating-controls {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.5rem;
-    margin-top: 0.25rem;
-  }
-
-  .rating-button {
-    min-width: 0;
-    padding: 0.85rem 0.4rem;
-    min-height: 54px;
-    border-radius: 0.7rem;
-    font-size: 1.5rem;
-    border-width: 2px;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .rating-icon {
-    font-size: 1.6rem !important;
-    display: block !important;
-    line-height: 1 !important;
-  }
-
-  .rating-label {
-    display: block !important;
-    font-size: 0.65rem;
-    margin-top: 0.15rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-
-  .rating-shortcut {
-    display: none !important; /* Hide shortcuts on mobile */
-  }
-
-  /* Better contrast for inactive buttons */
-  .rating-button {
-    background: rgba(148, 163, 184, 0.15);
-    border-color: rgba(148, 163, 184, 0.4);
+    display: none !important;
   }
 
   /* Card content - compact */
@@ -1715,6 +2062,111 @@ a {
     overflow-y: auto;
     max-height: calc(100dvh - 250px);
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Mobile deck list optimizations */
+  .site-header {
+    padding: 1rem;
+  }
+
+  .site-header h1 {
+    font-size: 1.2rem;
+    margin: 0;
+  }
+
+  .site-header .subtitle {
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+  }
+
+  .deck-file-selector {
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  .content {
+    padding: 1rem;
+  }
+
+  .deck-list h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+  }
+
+  /* Hide desktop filters on mobile */
+  .deck-filter {
+    display: none;
+  }
+
+  /* Mobile filter chips */
+  .deck-filter-mobile {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .filter-chip {
+    appearance: none;
+    border: 1.5px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fg);
+    border-radius: 1.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-chip:active {
+    transform: scale(0.95);
+  }
+
+  .filter-chip.is-active {
+    background: var(--accent-basic);
+    border-color: var(--accent-basic);
+    color: white;
+  }
+
+  /* Compact deck list */
+  .deck-list ul {
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  .deck-list li {
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+  }
+
+  .deck-list a {
+    font-size: 0.95rem;
+  }
+
+  .deck-list .count {
+    font-size: 0.75rem;
+  }
+
+  /* Compact favorites button */
+  .favorites-link-container {
+    margin-bottom: 1rem;
+  }
+
+  .favorites-deck-link {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    border-radius: 0.75rem;
+  }
+
+  .favorites-icon {
+    font-size: 1.1rem;
+  }
+
+  /* Site footer - compact */
+  .site-footer {
+    padding: 1rem;
+    font-size: 0.75rem;
   }
 }
 

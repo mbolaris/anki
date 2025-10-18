@@ -104,6 +104,7 @@
     const cardStage = viewer.querySelector('[data-role="card-stage"]');
     const fullscreenToggleButton = viewer.querySelector('[data-action="toggle-fullscreen"]');
     const shuffleToggleButton = viewer.querySelector('[data-action="toggle-shuffle"]');
+    const mobileMenu = document.querySelector('[data-role="mobile-menu"]');
 
     if (counterTotal) {
       counterTotal.textContent = String(totalCards);
@@ -392,6 +393,44 @@
         clearButton.classList.toggle("is-visible", hasAnyRating);
         clearButton.setAttribute("aria-pressed", hasAnyRating ? "true" : "false");
       }
+
+      // Update mobile thumb bar buttons
+      updateThumbBarRatings(cardId);
+    }
+
+    function updateThumbBarRatings(cardId) {
+      const activeCard = getActiveCardElement();
+      if (!activeCard || activeCard.dataset.cardId !== cardId) {
+        return;
+      }
+
+      const ratingSet = ratingsMap.get(cardId);
+      const isFavorite = Boolean(ratingSet && ratingSet.has("favorite"));
+      const isBad = Boolean(ratingSet && ratingSet.has("bad"));
+      const isMemorized = Boolean(ratingSet && ratingSet.has("memorized"));
+
+      const needsWorkBtn = viewer.querySelector('.thumb-chip--needs-work');
+      const masteredBtn = viewer.querySelector('.thumb-chip--mastered');
+      const ignoreBtn = viewer.querySelector('.thumb-chip--ignore');
+      const clearBtn = viewer.querySelector('.thumb-chip--clear');
+
+      if (needsWorkBtn) {
+        needsWorkBtn.classList.toggle("is-active", isFavorite);
+        needsWorkBtn.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+      }
+      if (masteredBtn) {
+        masteredBtn.classList.toggle("is-active", isMemorized);
+        masteredBtn.setAttribute("aria-pressed", isMemorized ? "true" : "false");
+      }
+      if (ignoreBtn) {
+        ignoreBtn.classList.toggle("is-active", isBad);
+        ignoreBtn.setAttribute("aria-pressed", isBad ? "true" : "false");
+      }
+      if (clearBtn) {
+        const hasAnyRating = Boolean(ratingSet && ratingSet.size > 0);
+        clearBtn.classList.toggle("is-visible", hasAnyRating);
+        clearBtn.setAttribute("aria-pressed", hasAnyRating ? "true" : "false");
+      }
     }
 
     async function loadRatingsFromServer() {
@@ -512,6 +551,7 @@
       });
       if (cardId) {
         markViewed(cardId);
+        updateThumbBarRatings(cardId);
       }
       updateCardTypeIndicator(activeCard);
       syncDebugPanels();
@@ -962,6 +1002,48 @@
       setHelpOpen(false);
     }
 
+    function isMobileMenuOpen() {
+      return mobileMenu && mobileMenu.getAttribute("aria-hidden") === "false";
+    }
+
+    function setMobileMenuOpen(open) {
+      if (!mobileMenu) {
+        return;
+      }
+      mobileMenu.setAttribute("aria-hidden", open ? "false" : "true");
+      if (open) {
+        updateMobileMenuStates();
+        const firstButton = mobileMenu.querySelector('.mobile-menu-item');
+        if (firstButton) {
+          firstButton.focus();
+        }
+      }
+    }
+
+    function toggleMobileMenu() {
+      setMobileMenuOpen(!isMobileMenuOpen());
+    }
+
+    function closeMobileMenu() {
+      setMobileMenuOpen(false);
+    }
+
+    function updateMobileMenuStates() {
+      if (!mobileMenu) {
+        return;
+      }
+
+      const shuffleState = mobileMenu.querySelector('[data-role="shuffle-state"]');
+      if (shuffleState) {
+        shuffleState.textContent = isShuffled ? "On" : "Off";
+      }
+
+      const hideMemorizedState = mobileMenu.querySelector('[data-role="hide-memorized-state"]');
+      if (hideMemorizedState) {
+        hideMemorizedState.textContent = hideMemorized ? "On" : "Off";
+      }
+    }
+
     function toggleDebug() {
       debugMode = !debugMode;
       persistDebugMode();
@@ -1015,6 +1097,33 @@
       window.setTimeout(() => target.classList.remove("key-pressed"), 180);
     }
 
+    function flashThumbButton(action) {
+      let selector = null;
+      if (action === "set-rating-favorite") {
+        selector = ".thumb-chip--needs-work";
+      } else if (action === "set-rating-memorized") {
+        selector = ".thumb-chip--mastered";
+      } else if (action === "set-rating-bad") {
+        selector = ".thumb-chip--ignore";
+      } else if (action === "clear-rating") {
+        selector = ".thumb-chip--clear";
+      } else if (action === "prev") {
+        selector = ".thumb-nav-button--prev";
+      } else if (action === "next") {
+        selector = ".thumb-nav-button--next";
+      } else if (action === "flip") {
+        selector = ".thumb-nav-button--flip";
+      }
+
+      if (selector) {
+        const target = viewer.querySelector(selector);
+        if (target) {
+          target.classList.add("key-pressed");
+          window.setTimeout(() => target.classList.remove("key-pressed"), 180);
+        }
+      }
+    }
+
     function performAction(action) {
       switch (action) {
         case "flip":
@@ -1028,30 +1137,43 @@
           break;
         case "random":
           goToRandom();
+          closeMobileMenu();
           break;
         case "toggle-shuffle":
           toggleShuffle();
+          updateMobileMenuStates();
           break;
         case "toggle-hide-memorized":
           toggleHideMemorized();
+          updateMobileMenuStates();
           break;
         case "mark-memorized":
           markCurrentCardMemorized();
           break;
         case "reset-progress":
           resetProgress();
+          closeMobileMenu();
           break;
         case "toggle-fullscreen":
           toggleFullscreenMode();
+          closeMobileMenu();
           break;
         case "toggle-help":
           toggleHelp();
+          closeMobileMenu();
           break;
         case "close-help":
           closeHelp();
           break;
         case "toggle-debug":
           toggleDebug();
+          closeMobileMenu();
+          break;
+        case "toggle-mobile-menu":
+          toggleMobileMenu();
+          break;
+        case "close-mobile-menu":
+          closeMobileMenu();
           break;
         case "set-rating-favorite": {
           const card = getActiveCardElement();
@@ -1120,6 +1242,7 @@
         event.preventDefault();
         performAction(action);
         flashControl(action);
+        flashThumbButton(action);
       }
     });
 
@@ -1152,6 +1275,7 @@
         }
         performAction("flip");
         flashControl("flip");
+        flashThumbButton("flip");
       });
     }
 
@@ -1208,6 +1332,7 @@
 
       performAction(action);
       flashControl(action);
+      flashThumbButton(action);
     });
 
     document.addEventListener("fullscreenchange", () => {
@@ -1270,10 +1395,12 @@
             // Swipe right - go to previous card
             performAction("prev");
             flashControl("prev");
+            flashThumbButton("prev");
           } else {
             // Swipe left - go to next card
             performAction("next");
             flashControl("next");
+            flashThumbButton("next");
           }
           event.preventDefault();
         }

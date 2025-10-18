@@ -167,6 +167,86 @@
         </div>
       </div>
     </div>
+
+    {# Mobile-only bottom thumb bar #}
+    <div class="mobile-thumb-bar" data-role="mobile-thumb-bar">
+      <div class="mobile-thumb-bar__ratings">
+        <button type="button" class="thumb-chip thumb-chip--needs-work" data-action="set-rating-favorite" title="Needs Work" aria-label="Mark as Needs Work">
+          <span class="thumb-chip__icon">★</span>
+          <span class="thumb-chip__label">Needs Work</span>
+        </button>
+        <button type="button" class="thumb-chip thumb-chip--mastered" data-action="set-rating-memorized" title="Mastered" aria-label="Mark as Mastered">
+          <span class="thumb-chip__icon">✓</span>
+          <span class="thumb-chip__label">Mastered</span>
+        </button>
+        <button type="button" class="thumb-chip thumb-chip--ignore" data-action="set-rating-bad" title="Ignore" aria-label="Mark to Ignore">
+          <span class="thumb-chip__icon">✗</span>
+          <span class="thumb-chip__label">Ignore</span>
+        </button>
+        <button type="button" class="thumb-chip thumb-chip--random" data-action="random" title="Random card" aria-label="Random card">
+          <span class="thumb-chip__icon">🎲</span>
+          <span class="thumb-chip__label">Random</span>
+        </button>
+      </div>
+      <nav class="mobile-thumb-bar__nav" role="navigation" aria-label="Card navigation">
+        <button type="button" class="thumb-nav-button thumb-nav-button--prev" data-action="prev" title="Previous card" aria-label="Previous card">
+          <span class="thumb-nav-button__icon">‹</span>
+        </button>
+        <button type="button" class="thumb-nav-button thumb-nav-button--flip thumb-nav-button--primary" data-action="flip" title="Flip card" aria-label="Flip card">
+          <span class="thumb-nav-button__icon">⤾</span>
+          <span class="thumb-nav-button__label">Flip</span>
+        </button>
+        <button type="button" class="thumb-nav-button thumb-nav-button--next" data-action="next" title="Next card" aria-label="Next card">
+          <span class="thumb-nav-button__icon">›</span>
+        </button>
+        <button type="button" class="thumb-nav-button thumb-nav-button--menu" data-action="toggle-mobile-menu" title="More options" aria-label="More options" aria-haspopup="dialog">
+          <span class="thumb-nav-button__icon">⋮</span>
+        </button>
+      </nav>
+    </div>
+
+    {# Mobile overflow menu #}
+    <div class="mobile-menu-overlay" data-role="mobile-menu" aria-hidden="true">
+      <div class="mobile-menu-overlay__backdrop" data-action="close-mobile-menu"></div>
+      <div class="mobile-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-menu-title">
+        <div class="mobile-menu__header">
+          <h3 id="mobile-menu-title" class="mobile-menu__title">Options</h3>
+          <button type="button" class="mobile-menu__close" data-action="close-mobile-menu" aria-label="Close menu">✕</button>
+        </div>
+        <div class="mobile-menu__content">
+          <button type="button" class="mobile-menu-item" data-action="toggle-shuffle">
+            <span class="mobile-menu-item__icon">🔀</span>
+            <div class="mobile-menu-item__text">
+              <span class="mobile-menu-item__label">Shuffle Cards</span>
+              <span class="mobile-menu-item__desc">Randomize card order</span>
+            </div>
+            <span class="mobile-menu-item__state" data-role="shuffle-state">Off</span>
+          </button>
+          <button type="button" class="mobile-menu-item" data-action="toggle-hide-memorized">
+            <span class="mobile-menu-item__icon">👁</span>
+            <div class="mobile-menu-item__text">
+              <span class="mobile-menu-item__label">Hide Memorized</span>
+              <span class="mobile-menu-item__desc">Skip mastered cards</span>
+            </div>
+            <span class="mobile-menu-item__state" data-role="hide-memorized-state">{{ 'On' if hide_memorized_default else 'Off' }}</span>
+          </button>
+          <button type="button" class="mobile-menu-item" data-action="clear-rating">
+            <span class="mobile-menu-item__icon">○</span>
+            <div class="mobile-menu-item__text">
+              <span class="mobile-menu-item__label">Clear Rating</span>
+              <span class="mobile-menu-item__desc">Remove current card rating</span>
+            </div>
+          </button>
+          <button type="button" class="mobile-menu-item mobile-menu-item--danger" data-action="reset-progress">
+            <span class="mobile-menu-item__icon">↺</span>
+            <div class="mobile-menu-item__text">
+              <span class="mobile-menu-item__label">Reset Progress</span>
+              <span class="mobile-menu-item__desc">Clear all ratings & viewed</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <div
