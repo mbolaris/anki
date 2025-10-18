@@ -232,6 +232,16 @@ def _extract_toggle_button(html: str, action: str) -> str:
     return match.group(0)
 
 
+def _extract_rating_button(html: str, rating: str) -> str:
+    match = re.search(
+        rf"<button[^>]+data-action=\"set-rating\"[^>]+data-rating=\"{rating}\"[^>]*>.*?</button>",
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group(0)
+
+
 def test_deck_template_hides_memorized_by_default(app, sample_collection: DeckCollection) -> None:
     """Regular decks should hide memorized cards initially."""
 
@@ -264,20 +274,6 @@ def test_favorites_template_shows_memorized_by_default(app, sample_collection: D
     assert '>Show Memorized<' in button
 
 
-def test_deck_template_hides_known_by_default(app, sample_collection: DeckCollection) -> None:
-    """Known cards should be hidden until the user toggles them back on."""
-
-    with app.test_request_context('/'):
-        template = app.jinja_env.get_template("deck.html")
-        html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
-
-    assert 'data-hide-known-default="true"' in html
-    toggle = _extract_toggle_button(html, "toggle-hide-known")
-    assert 'aria-pressed="true"' in toggle
-    assert 'Hide Known' in toggle
-    assert 'data-role="toggle-state">On<' in toggle
-
-
 def test_debug_control_is_rendered_as_toggle(app, sample_collection: DeckCollection) -> None:
     """Debug control should present toggle state information for accessibility."""
 
@@ -289,3 +285,16 @@ def test_debug_control_is_rendered_as_toggle(app, sample_collection: DeckCollect
     assert 'class="toolbar-toggle toggle-switch"' in toggle
     assert 'title="Show debug information (D)"' in toggle
     assert 'data-role="toggle-state">Off<' in toggle
+
+
+def test_card_has_memorized_rating_control(app, sample_collection: DeckCollection) -> None:
+    """Each card should expose a memorized rating control."""
+
+    with app.test_request_context('/'):
+        template = app.jinja_env.get_template("deck.html")
+        html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
+
+    button = _extract_rating_button(html, "memorized")
+    assert 'class="rating-button rating-button--memorized"' in button
+    assert 'title="Mark as Memorized"' in button
+    assert '>Memorized<' in button

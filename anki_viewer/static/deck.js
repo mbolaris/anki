@@ -110,13 +110,10 @@
     }
 
     const viewedKey = `deck-${deckId}-viewed`;
-    const knownKey = `deck-${deckId}-known`;
     const ratingsKey = `deck-${deckId}-ratings`;
-    const hideKnownKey = `deck-${deckId}-hide-known`;
     const debugModeKey = `deck-${deckId}-debug-mode`;
 
     const viewedSet = readSet(viewedKey);
-    const knownSet = readSet(knownKey);
     const ratingsMap = new Map();
     const VALID_RATINGS = new Set(["favorite", "bad", "memorized"]);
 
@@ -238,14 +235,6 @@
       hideMemorized = hideMemorizedAttr.trim().toLowerCase() !== "false";
     }
 
-    const hideKnownAttr = viewer.getAttribute("data-hide-known-default");
-    let hideKnownDefault = true;
-    if (hideKnownAttr !== null) {
-      hideKnownDefault = hideKnownAttr.trim().toLowerCase() !== "false";
-    }
-    const storedHideKnown = readFromStorage(hideKnownKey);
-    let hideKnown = storedHideKnown === null ? hideKnownDefault : storedHideKnown !== "false";
-
     const storedDebugMode = readFromStorage(debugModeKey);
     let debugMode = storedDebugMode === "true";
 
@@ -257,8 +246,8 @@
       ["ArrowLeft", "prev"],
       ["r", "random"],
       ["R", "random"],
-      ["k", "mark-known"],
-      ["K", "mark-known"],
+      ["k", "mark-memorized"],
+      ["K", "mark-memorized"],
       ["d", "toggle-debug"],
       ["D", "toggle-debug"],
       ["1", "set-rating-favorite"],
@@ -269,14 +258,6 @@
 
     function persistViewed() {
       writeSet(viewedKey, viewedSet);
-    }
-
-    function persistKnown() {
-      writeSet(knownKey, knownSet);
-    }
-
-    function persistHideKnown() {
-      writeToStorage(hideKnownKey, hideKnown ? "true" : "false");
     }
 
     function persistDebugMode() {
@@ -655,19 +636,6 @@
       });
     }
 
-    function updateHideKnownToggle() {
-      const toggle = viewer.querySelector('[data-action="toggle-hide-known"]');
-      if (!toggle) {
-        return;
-      }
-      updateToggleSwitch(toggle, hideKnown, {
-        activeTitle: "Show known cards",
-        inactiveTitle: "Hide known cards",
-        activeLabel: "Hide Known",
-        inactiveLabel: "Show Known",
-      });
-    }
-
     function updateHideMemorizedToggle() {
       const toggle = viewer.querySelector('[data-action="toggle-hide-memorized"]');
       if (!toggle) {
@@ -686,15 +654,6 @@
       const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
       hideMemorized = !hideMemorized;
       updateHideMemorizedToggle();
-      refreshActiveCards(preserveCardId);
-    }
-
-    function toggleHideKnown() {
-      const activeCard = getActiveCardElement();
-      const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
-      hideKnown = !hideKnown;
-      persistHideKnown();
-      updateHideKnownToggle();
       refreshActiveCards(preserveCardId);
     }
 
@@ -740,20 +699,18 @@
         if (!cardId) {
           return false;
         }
-        const isKnown = knownSet.has(cardId);
         const ratingSet = ratingsMap.get(cardId);
         const isMemorized = Boolean(ratingSet && ratingSet.has("memorized"));
-        const excludeKnown = hideKnown && isKnown;
         const excludeMemorized = hideMemorized && isMemorized;
         const card = cardById.get(cardId);
         if (card) {
-          card.classList.toggle("is-known", isKnown);
-          if (isKnown) {
+          card.classList.toggle("is-memorized", isMemorized);
+          if (isMemorized) {
             card.classList.remove("revealed");
             updateQuestionVisibility(card);
           }
         }
-        return !excludeKnown && !excludeMemorized;
+        return !excludeMemorized;
       });
 
       activeCardIds = isShuffled ? shuffleArray(available) : available;
@@ -890,40 +847,76 @@
       showCardByIndex(newIndex);
     }
 
-    function markCurrentCardKnown() {
+    function applyMemorizedState(cardId, memorize) {
+      const existing = ratingsMap.get(cardId);
+      const updated = existing ? new Set(existing) : new Set();
+      if (memorize) {
+        updated.add("memorized");
+      } else {
+        updated.delete("memorized");
+      }
+
+      if (updated.size > 0) {
+        ratingsMap.set(cardId, updated);
+      } else {
+        ratingsMap.delete(cardId);
+      }
+
+      persistRatings();
+      updateCardRatingUI(cardId);
+
+      const ratingSet = ratingsMap.get(cardId);
+      saveRatingsToServer(cardId, ratingSet).catch((error) => {
+        console.error("Failed to save rating to server:", error);
+      });
+
+      return updated.has("memorized");
+    }
+
+    function markCurrentCardMemorized() {
       if (activeCardIds.length === 0) {
         return;
       }
       const cardId = activeCardIds[currentIndex];
-      knownSet.add(cardId);
-      persistKnown();
-      const card = cardById.get(cardId);
-      if (card) {
-        card.classList.add("is-known");
-        card.classList.remove("is-active", "revealed");
-        updateQuestionVisibility(card);
-      }
-      if (hideKnown) {
-        activeCardIds = activeCardIds.filter((id) => id !== cardId);
-        if (activeCardIds.length === 0) {
-          showCardByIndex(0);
-          return;
+      const ratingSet = ratingsMap.get(cardId);
+      const alreadyMemorized = Boolean(ratingSet && ratingSet.has("memorized"));
+      const isMemorized = applyMemorizedState(cardId, !alreadyMemorized);
+
+      if (isMemorized) {
+        if (hideMemorized) {
+          refreshActiveCards();
+        } else {
+          refreshActiveCards(cardId);
+          showCardByIndex(currentIndex + 1);
         }
-        const nextIndex = currentIndex >= activeCardIds.length ? 0 : currentIndex;
-        showCardByIndex(nextIndex);
       } else {
-        showCardByIndex(currentIndex + 1);
+        refreshActiveCards(cardId);
       }
     }
 
     function resetProgress() {
       viewedSet.clear();
-      knownSet.clear();
       removeFromStorage(viewedKey);
-      removeFromStorage(knownKey);
+      const cardsToUpdate = [];
+      ratingsMap.forEach((ratingSet, cardId) => {
+        if (ratingSet.delete("memorized")) {
+          if (ratingSet.size === 0) {
+            ratingsMap.delete(cardId);
+          }
+          cardsToUpdate.push(cardId);
+        }
+      });
+      persistRatings();
       cardElements.forEach((card) => {
-        card.classList.remove("is-known", "revealed");
+        card.classList.remove("is-memorized", "revealed");
         updateQuestionVisibility(card);
+      });
+      cardsToUpdate.forEach((cardId) => {
+        updateCardRatingUI(cardId);
+        const ratingSet = ratingsMap.get(cardId);
+        saveRatingsToServer(cardId, ratingSet).catch((error) => {
+          console.error("Failed to save rating to server:", error);
+        });
       });
       updateProgress();
       isShuffled = false;
@@ -1005,6 +998,11 @@
         target = helpToggleButton;
       } else if (action === "close-help" && helpOverlay) {
         target = helpOverlay.querySelector('[data-action="close-help"]');
+      } else if (action === "mark-memorized") {
+        const activeCard = getActiveCardElement();
+        if (activeCard) {
+          target = activeCard.querySelector('[data-action="set-rating"][data-rating="memorized"]');
+        }
       } else {
         target = viewer.querySelector(`[data-action="${action}"]`);
       }
@@ -1032,14 +1030,11 @@
         case "toggle-shuffle":
           toggleShuffle();
           break;
-        case "toggle-hide-known":
-          toggleHideKnown();
-          break;
         case "toggle-hide-memorized":
           toggleHideMemorized();
           break;
-        case "mark-known":
-          markCurrentCardKnown();
+        case "mark-memorized":
+          markCurrentCardMemorized();
           break;
         case "reset-progress":
           resetProgress();
@@ -1070,13 +1065,9 @@
           }
           break;
         }
-        case "set-rating-memorized": {
-          const card = getActiveCardElement();
-          if (card) {
-            toggleCardRating(card.dataset.cardId, "memorized");
-          }
+        case "set-rating-memorized":
+          markCurrentCardMemorized();
           break;
-        }
         case "clear-rating": {
           const card = getActiveCardElement();
           if (card) {
@@ -1111,7 +1102,11 @@
         const rating = target.getAttribute("data-rating");
         const card = target.closest(".card");
         if (card && rating) {
-          toggleCardRating(card.dataset.cardId, rating);
+          if (rating === "memorized" && card.classList.contains("is-active")) {
+            markCurrentCardMemorized();
+          } else {
+            toggleCardRating(card.dataset.cardId, rating);
+          }
         }
       } else if (action === "clear-rating") {
         event.preventDefault();
@@ -1291,7 +1286,6 @@
 
     loadRatings();
     updateShuffleToggle();
-    updateHideKnownToggle();
     updateHideMemorizedToggle();
     updateDebugToggle();
     refreshActiveCards();

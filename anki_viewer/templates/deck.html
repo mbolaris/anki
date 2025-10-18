@@ -7,14 +7,12 @@
 {% block site_footer %}{% endblock %}
 {% block content %}
   {% set hide_memorized_default = (not is_favorites|default(false)) %}
-  {% set hide_known_default = true %}
   <section
     class="card-viewer"
     data-deck-id="{{ deck.deck_id }}"
     data-total-cards="{{ deck.cards|length }}"
     data-active-card-type="{{ deck.cards[0].card_type if deck.cards else '' }}"
     data-hide-memorized-default="{{ 'true' if hide_memorized_default else 'false' }}"
-    data-hide-known-default="{{ 'true' if hide_known_default else 'false' }}"
   >
     <header class="viewer__toolbar" aria-label="Deck controls">
       <div class="viewer__toolbar-top">
@@ -32,7 +30,7 @@
               <span aria-hidden="true">/</span>
               <span data-role="counter-total">{{ deck.cards|length }}</span>
             </span>
-            <span class="viewer__counter-empty" data-role="counter-empty">All cards marked as known</span>
+            <span class="viewer__counter-empty" data-role="counter-empty">All cards marked as memorized</span>
           </p>
           <span class="viewer__progress-text" data-role="progress-percent">
             {% if deck.cards %}0 / {{ deck.cards|length }} viewed • 0%{% else %}No cards available{% endif %}
@@ -84,29 +82,6 @@
           </button>
         </div>
         <div class="toolbar-group" role="group" aria-label="Progress">
-          <button type="button" class="toolbar-button toolbar-button--primary" data-action="mark-known" title="Mark card as known (K)">
-            <span class="toolbar-button__icon" aria-hidden="true">✓</span>
-            <span class="toolbar-button__label">Known</span>
-            <span class="toolbar-button__hint" aria-hidden="true">K</span>
-          </button>
-          <button
-            type="button"
-            class="toolbar-toggle toggle-switch"
-            data-action="toggle-hide-known"
-            role="switch"
-            aria-checked="{{ 'true' if hide_known_default else 'false' }}"
-            aria-pressed="{{ 'true' if hide_known_default else 'false' }}"
-            data-state="{{ 'on' if hide_known_default else 'off' }}"
-            title="{{ 'Show known cards' if hide_known_default else 'Hide known cards' }}"
-          >
-            <span class="toggle-switch__track" aria-hidden="true">
-              <span class="toggle-switch__thumb"></span>
-            </span>
-            <span class="toggle-switch__content">
-              <span class="toggle-switch__label">{{ 'Hide Known' if hide_known_default else 'Show Known' }}</span>
-              <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if hide_known_default else 'Off' }}</span>
-            </span>
-          </button>
           <button
             type="button"
             class="toolbar-toggle toggle-switch"
@@ -179,7 +154,7 @@
         <div class="card-stage" data-role="card-stage">
           {% if deck.cards %}
             <div class="empty-state" data-role="empty-state" hidden>
-              All cards are marked as known. Reset progress to start over.
+              All cards are marked as memorized. Reset progress to start over.
             </div>
             {% set counter = namespace(value=0) %}
             {% for card in deck.cards %}
@@ -228,7 +203,7 @@
         </div>
         <div>
           <dt><kbd>K</kbd></dt>
-          <dd>Mark the current card as known</dd>
+          <dd>Toggle the memorized state for the current card</dd>
         </div>
         <div>
           <dt><kbd>D</kbd></dt>
