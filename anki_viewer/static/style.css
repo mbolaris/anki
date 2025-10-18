@@ -732,7 +732,7 @@ a {
   transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-.card.is-known {
+.card.is-memorized {
   opacity: 0.72;
   filter: saturate(0.82);
 }
@@ -1532,7 +1532,7 @@ a {
   .toolbar-button[data-action="prev"],
   .toolbar-button[data-action="next"],
   .toolbar-button[data-action="flip"],
-  .toolbar-button[data-action="mark-known"],
+  .toolbar-button[data-action="mark-memorized"],
   .toolbar-button[data-action="toggle-fullscreen"] {
     display: none !important;
   }
