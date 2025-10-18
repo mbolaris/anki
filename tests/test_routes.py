@@ -222,9 +222,9 @@ def test_normalize_media_url_path_variations() -> None:
     assert anki_viewer._normalize_media_url_path("") == "/media"
 
 
-def _extract_hide_memorized_button(html: str) -> str:
+def _extract_toggle_button(html: str, action: str) -> str:
     match = re.search(
-        r"<button[^>]+data-action=\"toggle-hide-memorized\"[^>]*>.*?</button>",
+        rf"<button[^>]+data-action=\"{action}\"[^>]*>.*?</button>",
         html,
         re.DOTALL,
     )
@@ -240,10 +240,10 @@ def test_deck_template_hides_memorized_by_default(app, sample_collection: DeckCo
         html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
 
     assert 'data-hide-memorized-default="true"' in html
-    button = _extract_hide_memorized_button(html)
+    button = _extract_toggle_button(html, "toggle-hide-memorized")
     assert 'aria-pressed="true"' in button
     assert 'title="Show memorized cards"' in button
-    assert '>Show Memorized<' in button
+    assert '>Hide Memorized<' in button
 
 
 def test_favorites_template_shows_memorized_by_default(app, sample_collection: DeckCollection) -> None:
@@ -258,7 +258,34 @@ def test_favorites_template_shows_memorized_by_default(app, sample_collection: D
         )
 
     assert 'data-hide-memorized-default="false"' in html
-    button = _extract_hide_memorized_button(html)
+    button = _extract_toggle_button(html, "toggle-hide-memorized")
     assert 'aria-pressed="false"' in button
     assert 'title="Hide memorized cards"' in button
-    assert '>Hide Memorized<' in button
+    assert '>Show Memorized<' in button
+
+
+def test_deck_template_hides_known_by_default(app, sample_collection: DeckCollection) -> None:
+    """Known cards should be hidden until the user toggles them back on."""
+
+    with app.test_request_context('/'):
+        template = app.jinja_env.get_template("deck.html")
+        html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
+
+    assert 'data-hide-known-default="true"' in html
+    toggle = _extract_toggle_button(html, "toggle-hide-known")
+    assert 'aria-pressed="true"' in toggle
+    assert 'Hide Known' in toggle
+    assert 'data-role="toggle-state">On<' in toggle
+
+
+def test_debug_control_is_rendered_as_toggle(app, sample_collection: DeckCollection) -> None:
+    """Debug control should present toggle state information for accessibility."""
+
+    with app.test_request_context('/'):
+        template = app.jinja_env.get_template("deck.html")
+        html = template.render(deck=sample_collection.decks[1], collection=sample_collection)
+
+    toggle = _extract_toggle_button(html, "toggle-debug")
+    assert 'class="toolbar-toggle toggle-switch"' in toggle
+    assert 'title="Show debug information (D)"' in toggle
+    assert 'data-role="toggle-state">Off<' in toggle

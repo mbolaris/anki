@@ -112,6 +112,8 @@
     const viewedKey = `deck-${deckId}-viewed`;
     const knownKey = `deck-${deckId}-known`;
     const ratingsKey = `deck-${deckId}-ratings`;
+    const hideKnownKey = `deck-${deckId}-hide-known`;
+    const debugModeKey = `deck-${deckId}-debug-mode`;
 
     const viewedSet = readSet(viewedKey);
     const knownSet = readSet(knownKey);
@@ -236,6 +238,17 @@
       hideMemorized = hideMemorizedAttr.trim().toLowerCase() !== "false";
     }
 
+    const hideKnownAttr = viewer.getAttribute("data-hide-known-default");
+    let hideKnownDefault = true;
+    if (hideKnownAttr !== null) {
+      hideKnownDefault = hideKnownAttr.trim().toLowerCase() !== "false";
+    }
+    const storedHideKnown = readFromStorage(hideKnownKey);
+    let hideKnown = storedHideKnown === null ? hideKnownDefault : storedHideKnown !== "false";
+
+    const storedDebugMode = readFromStorage(debugModeKey);
+    let debugMode = storedDebugMode === "true";
+
     const keyToAction = new Map([
       [" ", "flip"],
       ["f", "flip"],
@@ -260,6 +273,14 @@
 
     function persistKnown() {
       writeSet(knownKey, knownSet);
+    }
+
+    function persistHideKnown() {
+      writeToStorage(hideKnownKey, hideKnown ? "true" : "false");
+    }
+
+    function persistDebugMode() {
+      writeToStorage(debugModeKey, debugMode ? "true" : "false");
     }
 
     function loadRatings() {
@@ -512,6 +533,7 @@
         markViewed(cardId);
       }
       updateCardTypeIndicator(activeCard);
+      syncDebugPanels();
     }
 
     function updateCounter() {
@@ -633,18 +655,29 @@
       });
     }
 
+    function updateHideKnownToggle() {
+      const toggle = viewer.querySelector('[data-action="toggle-hide-known"]');
+      if (!toggle) {
+        return;
+      }
+      updateToggleSwitch(toggle, hideKnown, {
+        activeTitle: "Show known cards",
+        inactiveTitle: "Hide known cards",
+        activeLabel: "Hide Known",
+        inactiveLabel: "Show Known",
+      });
+    }
+
     function updateHideMemorizedToggle() {
       const toggle = viewer.querySelector('[data-action="toggle-hide-memorized"]');
       if (!toggle) {
         return;
       }
-      const showingMemorized = !hideMemorized;
-      updateToggleSwitch(toggle, showingMemorized, {
-        activeTitle: "Hide memorized cards",
-        inactiveTitle: "Show memorized cards",
+      updateToggleSwitch(toggle, hideMemorized, {
+        activeTitle: "Show memorized cards",
+        inactiveTitle: "Hide memorized cards",
         activeLabel: "Hide Memorized",
         inactiveLabel: "Show Memorized",
-        pressedWhenActive: false,
       });
     }
 
@@ -656,6 +689,52 @@
       refreshActiveCards(preserveCardId);
     }
 
+    function toggleHideKnown() {
+      const activeCard = getActiveCardElement();
+      const preserveCardId = activeCard ? activeCard.dataset.cardId : undefined;
+      hideKnown = !hideKnown;
+      persistHideKnown();
+      updateHideKnownToggle();
+      refreshActiveCards(preserveCardId);
+    }
+
+    function updateDebugToggle() {
+      const toggle = viewer.querySelector('[data-action="toggle-debug"]');
+      if (!toggle) {
+        return;
+      }
+      updateToggleSwitch(toggle, debugMode, {
+        activeTitle: "Hide debug information (D)",
+        inactiveTitle: "Show debug information (D)",
+        activeStateText: "On",
+        inactiveStateText: "Off",
+      });
+    }
+
+    function setDebugPanelState(card, open) {
+      if (!card) {
+        return;
+      }
+      const debugPanel = card.querySelector('[data-role="debug-panel"]');
+      if (!debugPanel) {
+        return;
+      }
+      if (open) {
+        debugPanel.hidden = false;
+        debugPanel.setAttribute("open", "");
+      } else {
+        debugPanel.hidden = true;
+        debugPanel.removeAttribute("open");
+      }
+    }
+
+    function syncDebugPanels() {
+      cardElements.forEach((card) => {
+        const shouldShow = debugMode && card.classList.contains("is-active");
+        setDebugPanelState(card, shouldShow);
+      });
+    }
+
     function rebuildActiveCardIds(preserveCardId) {
       const available = baseOrder.filter((cardId) => {
         if (!cardId) {
@@ -663,7 +742,9 @@
         }
         const isKnown = knownSet.has(cardId);
         const ratingSet = ratingsMap.get(cardId);
-        const isMemorized = Boolean(hideMemorized && ratingSet && ratingSet.has("memorized"));
+        const isMemorized = Boolean(ratingSet && ratingSet.has("memorized"));
+        const excludeKnown = hideKnown && isKnown;
+        const excludeMemorized = hideMemorized && isMemorized;
         const card = cardById.get(cardId);
         if (card) {
           card.classList.toggle("is-known", isKnown);
@@ -672,7 +753,7 @@
             updateQuestionVisibility(card);
           }
         }
-        return !isKnown && !isMemorized;
+        return !excludeKnown && !excludeMemorized;
       });
 
       activeCardIds = isShuffled ? shuffleArray(available) : available;
@@ -759,11 +840,12 @@
           updateQuestionVisibility(card);
         });
         updateCardTypeIndicator(null);
-        showEmptyStateIfNeeded();
-        updateCounter();
-        updateControlsState();
-        return;
-      }
+      showEmptyStateIfNeeded();
+      updateCounter();
+      updateControlsState();
+      syncDebugPanels();
+      return;
+    }
       const normalizedIndex = ((index % activeCardIds.length) + activeCardIds.length) % activeCardIds.length;
       currentIndex = normalizedIndex;
       const cardId = activeCardIds[currentIndex];
@@ -771,6 +853,7 @@
       showEmptyStateIfNeeded();
       updateCounter();
       updateControlsState();
+      syncDebugPanels();
     }
 
     function flipCurrentCard() {
@@ -820,13 +903,17 @@
         card.classList.remove("is-active", "revealed");
         updateQuestionVisibility(card);
       }
-      activeCardIds = activeCardIds.filter((id) => id !== cardId);
-      if (activeCardIds.length === 0) {
-        showCardByIndex(0);
-        return;
+      if (hideKnown) {
+        activeCardIds = activeCardIds.filter((id) => id !== cardId);
+        if (activeCardIds.length === 0) {
+          showCardByIndex(0);
+          return;
+        }
+        const nextIndex = currentIndex >= activeCardIds.length ? 0 : currentIndex;
+        showCardByIndex(nextIndex);
+      } else {
+        showCardByIndex(currentIndex + 1);
       }
-      const nextIndex = currentIndex >= activeCardIds.length ? 0 : currentIndex;
-      showCardByIndex(nextIndex);
     }
 
     function resetProgress() {
@@ -881,20 +968,10 @@
     }
 
     function toggleDebug() {
-      const activeCard = getActiveCardElement();
-      if (!activeCard) {
-        return;
-      }
-      const debugPanel = activeCard.querySelector('[data-role="debug-panel"]');
-      if (!debugPanel) {
-        return;
-      }
-      debugPanel.hidden = !debugPanel.hidden;
-      if (!debugPanel.hidden) {
-        debugPanel.setAttribute("open", "");
-      } else {
-        debugPanel.removeAttribute("open");
-      }
+      debugMode = !debugMode;
+      persistDebugMode();
+      updateDebugToggle();
+      syncDebugPanels();
     }
 
     async function fetchCardData(deckId, cardId) {
@@ -954,6 +1031,9 @@
           break;
         case "toggle-shuffle":
           toggleShuffle();
+          break;
+        case "toggle-hide-known":
+          toggleHideKnown();
           break;
         case "toggle-hide-memorized":
           toggleHideMemorized();
@@ -1211,7 +1291,9 @@
 
     loadRatings();
     updateShuffleToggle();
+    updateHideKnownToggle();
     updateHideMemorizedToggle();
+    updateDebugToggle();
     refreshActiveCards();
     syncFullscreenFromDocument();
 
