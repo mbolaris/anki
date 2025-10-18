@@ -63,6 +63,7 @@
             data-action="toggle-shuffle"
             role="switch"
             aria-checked="false"
+            aria-pressed="false"
             data-state="off"
             title="Shuffle order"
           >
@@ -93,6 +94,7 @@
             data-action="toggle-hide-memorized"
             role="switch"
             aria-checked="{{ 'true' if show_memorized else 'false' }}"
+            aria-pressed="{{ 'false' if show_memorized else 'true' }}"
             data-state="{{ 'on' if show_memorized else 'off' }}"
             title="{{ 'Hide memorized cards' if show_memorized else 'Show memorized cards' }}"
           >
@@ -100,7 +102,7 @@
               <span class="toggle-switch__thumb"></span>
             </span>
             <span class="toggle-switch__content">
-              <span class="toggle-switch__label">Show Memorized</span>
+              <span class="toggle-switch__label">{{ 'Hide Memorized' if show_memorized else 'Show Memorized' }}</span>
               <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if show_memorized else 'Off' }}</span>
             </span>
           </button>
