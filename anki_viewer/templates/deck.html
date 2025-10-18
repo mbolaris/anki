@@ -57,9 +57,22 @@
             <span class="toolbar-button__label">Flip</span>
             <span class="toolbar-button__hint" aria-hidden="true">Space</span>
           </button>
-          <button type="button" class="toolbar-button" data-action="toggle-shuffle" title="Shuffle order">
-            <span class="toolbar-button__icon" aria-hidden="true">⇋</span>
-            <span class="toolbar-button__label">Shuffle</span>
+          <button
+            type="button"
+            class="toolbar-toggle toggle-switch"
+            data-action="toggle-shuffle"
+            role="switch"
+            aria-checked="false"
+            data-state="off"
+            title="Shuffle order"
+          >
+            <span class="toggle-switch__track" aria-hidden="true">
+              <span class="toggle-switch__thumb"></span>
+            </span>
+            <span class="toggle-switch__content">
+              <span class="toggle-switch__label">Shuffle</span>
+              <span class="toggle-switch__state" data-role="toggle-state">Off</span>
+            </span>
           </button>
           <button type="button" class="toolbar-button" data-action="random" title="Random card (R)">
             <span class="toolbar-button__icon" aria-hidden="true">🎲</span>
@@ -73,15 +86,23 @@
             <span class="toolbar-button__label">Known</span>
             <span class="toolbar-button__hint" aria-hidden="true">K</span>
           </button>
+          {% set show_memorized = not hide_memorized_default %}
           <button
             type="button"
-            class="toolbar-button"
+            class="toolbar-toggle toggle-switch"
             data-action="toggle-hide-memorized"
-            title="{{ 'Show memorized cards' if hide_memorized_default else 'Hide memorized cards' }}"
-            aria-pressed="{{ 'true' if hide_memorized_default else 'false' }}"
+            role="switch"
+            aria-checked="{{ 'true' if show_memorized else 'false' }}"
+            data-state="{{ 'on' if show_memorized else 'off' }}"
+            title="{{ 'Hide memorized cards' if show_memorized else 'Show memorized cards' }}"
           >
-            <span class="toolbar-button__icon" aria-hidden="true">👁</span>
-            <span class="toolbar-button__label">{{ 'Show Memorized' if hide_memorized_default else 'Hide Memorized' }}</span>
+            <span class="toggle-switch__track" aria-hidden="true">
+              <span class="toggle-switch__thumb"></span>
+            </span>
+            <span class="toggle-switch__content">
+              <span class="toggle-switch__label">Show Memorized</span>
+              <span class="toggle-switch__state" data-role="toggle-state">{{ 'On' if show_memorized else 'Off' }}</span>
+            </span>
           </button>
           <button type="button" class="toolbar-button" data-action="reset-progress" title="Reset progress">
             <span class="toolbar-button__icon" aria-hidden="true">↺</span>

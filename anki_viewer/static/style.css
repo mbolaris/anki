@@ -545,6 +545,104 @@ a {
   animation: flashButton 0.25s ease;
 }
 
+.toolbar-toggle {
+  appearance: none;
+  border: 1px solid var(--card-border);
+  background: var(--surface-strong);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.4rem 0.75rem;
+  min-height: var(--toolbar-button-height);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.toolbar-toggle:hover,
+.toolbar-toggle:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.18);
+}
+
+.toolbar-toggle[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.toolbar-toggle__content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+}
+
+.toolbar-toggle__label {
+  font-size: 0.8rem;
+}
+
+.toolbar-toggle__state {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.toolbar-toggle[data-state="on"] {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 12px 26px rgba(99, 102, 241, 0.2);
+}
+
+.toolbar-toggle[data-state="on"] .toolbar-toggle__state {
+  color: var(--accent-basic);
+}
+
+.toggle-switch__track {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.45);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggle-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.toolbar-toggle[data-state="on"] .toggle-switch__track {
+  background: linear-gradient(135deg, var(--accent-basic), #6366f1);
+}
+
+.toolbar-toggle[data-state="on"] .toggle-switch__thumb {
+  transform: translateX(22px);
+}
+
+.toolbar-toggle[disabled] .toggle-switch__thumb {
+  box-shadow: none;
+}
+
+.toolbar-toggle[disabled] .toggle-switch__track {
+  background: rgba(148, 163, 184, 0.25);
+}
+
 @keyframes flashButton {
   0% {
     transform: translateY(0);
@@ -1436,6 +1534,10 @@ a {
   .toolbar-button[data-action="flip"],
   .toolbar-button[data-action="mark-known"],
   .toolbar-button[data-action="toggle-fullscreen"] {
+    display: none !important;
+  }
+
+  .toolbar-toggle {
     display: none !important;
   }
 
