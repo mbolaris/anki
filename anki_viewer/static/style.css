@@ -6,21 +6,45 @@
   --bg-dark: #0f172a;
   --fg: #0f172a;
   --fg-dark: #f8fafc;
-  --accent: #4338ca;
-  --accent-basic: #2563eb;
+  --accent: #2d7d3a;
+  --accent-basic: #2d7d3a;
   --accent-cloze: #7c3aed;
-  --accent-image: #059669;
+  --accent-image: #2d7d3a;
   /* softened highlight color to replace bright yellow for better readability */
   --highlight: #d69f33; /* softer muted-gold */
   --card-bg: #ffffff;
-  --card-border: rgba(148, 163, 184, 0.35);
+  --card-border: rgba(45, 125, 58, 0.25);
   --muted: #64748b;
   --surface: rgba(255, 255, 255, 0.88);
   --surface-strong: rgba(255, 255, 255, 0.96);
   --shadow-soft: 0 20px 45px rgba(15, 23, 42, 0.12);
-  --shadow-button: 0 10px 25px rgba(67, 56, 202, 0.22);
+  --shadow-button: 0 10px 25px rgba(45, 125, 58, 0.22);
   --viewer-toolbar-height: 3rem;
   --toolbar-button-height: 2.5rem;
+}
+
+/* Galaga arcade theme - CSS variables override */
+body.theme-galaga {
+  font-family: "Press Start 2P", "Courier New", monospace;
+  line-height: 1.6;
+  color-scheme: dark;
+  /* Galaga color palette - green, yellow, red theme inspired by the logo */
+  --bg: #000000;
+  --bg-dark: #000000;
+  --fg: #00ff41; /* bright neon green - primary text */
+  --fg-dark: #00ff41;
+  --accent: #ffed00; /* bright yellow - highlights */
+  --accent-basic: #00ff41; /* neon green - primary accent */
+  --accent-cloze: #ff1744; /* bright red - warnings */
+  --accent-image: #76ff03; /* lime green - success */
+  --highlight: #ffed00; /* bright yellow */
+  --card-bg: #0a1f0a;
+  --card-border: rgba(0, 255, 65, 0.4);
+  --muted: #4caf50;
+  --surface: rgba(10, 31, 10, 0.88);
+  --surface-strong: rgba(10, 31, 10, 0.96);
+  --shadow-soft: 0 0 40px rgba(0, 255, 65, 0.5), 0 0 80px rgba(0, 255, 65, 0.2);
+  --shadow-button: 0 0 30px rgba(255, 237, 0, 0.6), 0 4px 15px rgba(0, 0, 0, 0.8);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,9 +70,9 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.14), transparent 55%),
-    radial-gradient(circle at 90% 15%, rgba(59, 130, 246, 0.12), transparent 50%),
-    radial-gradient(circle at 20% 85%, rgba(16, 185, 129, 0.12), transparent 50%),
+    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08), transparent 55%),
+    radial-gradient(circle at 90% 15%, rgba(59, 130, 246, 0.06), transparent 50%),
+    radial-gradient(circle at 20% 85%, rgba(45, 125, 58, 0.08), transparent 50%),
     var(--bg);
   color: var(--fg);
 }
@@ -64,8 +88,8 @@ a {
 .site-header,
 .site-footer {
   padding: clamp(1.5rem, 3vw, 2rem) clamp(1.5rem, 4vw, 3rem);
-  background: linear-gradient(135deg, #4338ca, #6366f1);
-  color: #f8fafc;
+  background: linear-gradient(135deg, #2d7d3a, #3a9b48);
+  color: #ffffff;
 }
 
 .site-header a {
@@ -2178,5 +2202,242 @@ a {
 
   .rating-button {
     min-height: 2.6rem;
+  }
+}
+
+/* Galaga theme star-field background */
+body.theme-galaga {
+  background:
+    radial-gradient(2px 2px at 20% 30%, #00ff41, transparent),
+    radial-gradient(2px 2px at 60% 70%, #76ff03, transparent),
+    radial-gradient(1px 1px at 50% 50%, #ffed00, transparent),
+    radial-gradient(1px 1px at 80% 10%, #00ff41, transparent),
+    radial-gradient(2px 2px at 90% 60%, #76ff03, transparent),
+    radial-gradient(1px 1px at 33% 80%, #ffed00, transparent),
+    radial-gradient(2px 2px at 15% 60%, #00ff41, transparent),
+    radial-gradient(1px 1px at 45% 15%, #ff1744, transparent),
+    #000000;
+  background-size:
+    200% 200%, 200% 200%, 200% 200%, 200% 200%,
+    200% 200%, 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+  animation: starfield 120s linear infinite;
+}
+
+@keyframes starfield {
+  0% { background-position: 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%; }
+  100% { background-position: 50% 100%, -50% 100%, 25% 100%, -25% 100%, 75% 100%, 35% 100%, -35% 100%, 0% 0%; }
+}
+
+/* Theme Toggle Button */
+.theme-toggle-button {
+  appearance: none;
+  border: 2px solid rgba(45, 125, 58, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d7d3a;
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(45, 125, 58, 0.2);
+}
+
+.theme-toggle-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 125, 58, 0.3);
+  border-color: #2d7d3a;
+}
+
+.theme-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.theme-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-toggle-button {
+    background: rgba(15, 23, 42, 0.9);
+    color: #4ade80;
+    border-color: rgba(45, 125, 58, 0.4);
+  }
+}
+
+/* Theme toggle button in Galaga mode */
+body.theme-galaga .theme-toggle-button {
+  border: 2px solid var(--accent);
+  background: linear-gradient(135deg, #ffed00, #ff1744);
+  color: #000000;
+  border-radius: 0;
+  box-shadow: 0 0 20px rgba(255, 237, 0, 0.8);
+  text-shadow: 0 0 8px rgba(255, 237, 0, 1);
+  animation: favoritesPulse 2s ease-in-out infinite;
+}
+
+body.theme-galaga .theme-toggle-button:hover {
+  box-shadow: 0 0 30px rgba(255, 237, 0, 1);
+}
+
+/* Deck Selector Dropdown */
+.deck-selector {
+  position: relative;
+}
+
+.deck-selector__trigger {
+  appearance: none;
+  border: 2px solid rgba(45, 125, 58, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d7d3a;
+  border-radius: 0.75rem;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(45, 125, 58, 0.2);
+  min-width: 180px;
+}
+
+.deck-selector__trigger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(45, 125, 58, 0.3);
+  border-color: #2d7d3a;
+}
+
+.deck-selector__trigger[aria-expanded="true"] {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.deck-selector__icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.deck-selector__label {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.deck-selector__arrow {
+  font-size: 0.7rem;
+  transition: transform 0.3s ease;
+}
+
+.deck-selector__trigger[aria-expanded="true"] .deck-selector__arrow {
+  transform: rotate(180deg);
+}
+
+.deck-selector__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 2px solid rgba(45, 125, 58, 0.35);
+  border-top: none;
+  border-radius: 0 0 0.75rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  max-height: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  color: #0f172a;
+}
+
+.deck-selector__dropdown[hidden] {
+  display: none;
+}
+
+
+.deck-selector__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  max-height: 300px;
+  background: #ffffff;
+}
+
+.deck-selector__list li {
+  margin: 0;
+  padding: 0;
+}
+
+.deck-selector__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: #0f172a;
+  text-decoration: none;
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.deck-selector__item:hover {
+  background: rgba(45, 125, 58, 0.08);
+}
+
+.deck-selector__item--active {
+  background: #e8f5e9;
+  font-weight: 700;
+  color: #2d7d3a;
+}
+
+.deck-selector__item-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.deck-selector__item-name {
+  flex: 1;
+  font-size: 0.9rem;
+}
+
+.deck-selector__list li:not(:last-child) .deck-selector__item {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .deck-selector__trigger {
+    background: rgba(15, 23, 42, 0.9);
+    color: #4ade80;
+    border-color: rgba(45, 125, 58, 0.4);
+  }
+
+  .deck-selector__dropdown {
+    background: #1e293b;
+    border-color: rgba(45, 125, 58, 0.4);
+  }
+
+
+  .deck-selector__item {
+    color: #f8fafc;
+  }
+
+  .deck-selector__item:hover {
+    background: rgba(74, 222, 128, 0.1);
+  }
+
+  .deck-selector__item--active {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
   }
 }

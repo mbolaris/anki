@@ -4,25 +4,56 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Anki Deck Viewer{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='galaga-theme.css') }}">
   </head>
   <body{% block body_attrs %}{% endblock %}>
     {% block site_header %}
       <header class="site-header">
-        <h1><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
-        {% if available_packages and available_packages|length > 1 %}
-          <div class="deck-file-selector">
-            <strong>Deck Files:</strong>
-            {% for pkg in available_packages %}
-              {% if pkg == current_package %}
-                <span class="current-deck">{{ pkg.stem }}</span>
-              {% else %}
-                <a href="{{ url_for('switch_deck', filename=pkg.name) }}" class="deck-link">{{ pkg.stem }}</a>
-              {% endif %}
-              {% if not loop.last %} | {% endif %}
-            {% endfor %}
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <h1 style="margin: 0;"><a href="{{ url_for('index') }}">Anki Deck Viewer</a></h1>
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            {% if available_packages and available_packages|length > 1 %}
+              <div class="deck-selector">
+                <button class="deck-selector__trigger" id="deck-selector-trigger" aria-haspopup="true" aria-expanded="false">
+                  <span class="deck-selector__icon">📚</span>
+                  <span class="deck-selector__label">{{ current_package.stem if current_package else 'Select Deck' }}</span>
+                  <span class="deck-selector__arrow">▼</span>
+                </button>
+                <div class="deck-selector__dropdown" id="deck-selector-dropdown" hidden>
+                  <ul class="deck-selector__list" id="deck-list">
+                    <li>
+                      <a href="{{ url_for('favorites') }}"
+                         class="deck-selector__item deck-selector__item--favorites"
+                         data-deck-name="Favorites">
+                        <span class="deck-selector__item-icon">★</span>
+                        <span class="deck-selector__item-name">Favorites</span>
+                      </a>
+                    </li>
+                    {% for pkg in available_packages %}
+                      <li>
+                        <a href="{{ url_for('switch_deck', filename=pkg.name) }}"
+                           class="deck-selector__item {% if pkg == current_package %}deck-selector__item--active{% endif %}"
+                           data-deck-name="{{ pkg.stem }}">
+                          <span class="deck-selector__item-icon">{% if pkg == current_package %}✓{% else %}📄{% endif %}</span>
+                          <span class="deck-selector__item-name">{{ pkg.stem }}</span>
+                        </a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </div>
+            {% endif %}
+            <button id="theme-toggle" class="theme-toggle-button" aria-label="Toggle Galaga theme">
+              <span class="theme-icon">🕹️</span>
+              <span class="theme-label">ARCADE</span>
+            </button>
           </div>
-        {% endif %}
+        </div>
         {% if deck_collection %}
           <p class="subtitle">
             {{ deck_collection.total_cards }} cards available across {{ deck_collection.decks|length }} decks.
@@ -38,6 +69,8 @@
         <p>Deck source: <code>{{ package_path }}</code></p>
       </footer>
     {% endblock %}
+    <script src="{{ url_for('static', filename='theme-toggle.js') }}"></script>
+    <script src="{{ url_for('static', filename='deck-selector.js') }}"></script>
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>
